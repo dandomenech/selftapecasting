@@ -16,11 +16,16 @@ export default function TopNav({ showLogout = true }) {
       <div className="text-[15px] font-bold tracking-wider font-serif">
         SELF TAPE<span className="text-stc-gold"> CASTING</span>
       </div>
-      {showLogout && (
-        <button onClick={handleLogout} className="text-gray-400 text-xs">
-          Log Out
+      <div className="flex items-center gap-3">
+        <button onClick={() => router.push('/help')} className="text-gray-400 text-xs">
+          Help
         </button>
-      )}
+        {showLogout && (
+          <button onClick={handleLogout} className="text-gray-400 text-xs">
+            Log Out
+          </button>
+        )}
+      </div>
     </header>
   );
 }

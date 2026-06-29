@@ -13,10 +13,45 @@ export default function PortfolioPage() {
   const [roles, setRoles] = useState({});
   const [view, setView] = useState('videos');
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+
+    // Delete the video file from storage if possible
+    try {
+      // Extract storage path from the public URL
+      const url = deleteTarget.video_url;
+      const marker = '/videos/';
+      const idx = url.indexOf(marker);
+      if (idx !== -1) {
+        const path = url.substring(idx + marker.length);
+        await supabase.storage.from('videos').remove([path]);
+      }
+    } catch (e) {
+      console.error('Storage delete error (continuing):', e);
+    }
+
+    // Delete the database record
+    const { error } = await supabase.from('videos').delete().eq('id', deleteTarget.id);
+    if (error) {
+      console.error('Delete error:', error);
+      alert('Could not delete the video. Please try again.');
+      setDeleting(false);
+      return;
+    }
+
+    // Remove from local state
+    setVideos(prev => prev.filter(v => v.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    setDeleting(false);
+  };
 
   const loadData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -170,6 +205,10 @@ export default function PortfolioPage() {
                         {v.status === 'processing' && (
                           <span className="text-[10px] text-stc-warning font-bold">Processing...</span>
                         )}
+                        <button onClick={() => setDeleteTarget(v)}
+                          className="text-stc-muted hover:text-stc-accent text-lg px-2 flex-shrink-0">
+                          🗑
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -207,6 +246,32 @@ export default function PortfolioPage() {
           </div>
         )}
       </main>
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="bg-white w-full rounded-t-2xl p-4" onClick={e => e.stopPropagation()}>
+            <div className="w-9 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+            <h2 className="text-lg font-bold font-serif mb-2">Delete this tape?</h2>
+            <p className="text-sm text-stc-muted mb-1">
+              {deleteTarget.video_type === 'song_1' ? deleteTarget.roles?.song_1_title :
+               deleteTarget.video_type === 'song_2' ? deleteTarget.roles?.song_2_title :
+               deleteTarget.roles?.scene_title}
+            </p>
+            <p className="text-xs text-stc-muted mb-4">
+              This permanently removes the video. This can't be undone.
+            </p>
+            <button onClick={handleDelete} disabled={deleting}
+              className="w-full py-3 bg-stc-accent text-white font-semibold rounded-md text-sm disabled:opacity-50">
+              {deleting ? 'Deleting...' : 'Delete Permanently'}
+            </button>
+            <button onClick={() => setDeleteTarget(null)} disabled={deleting}
+              className="w-full py-3 mt-2 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <BottomNav
         tabs={tabs}
