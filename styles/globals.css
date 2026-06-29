@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --stc-dark: #1a1a2e;
+  --stc-accent: #8b0000;
+  --stc-gold: #cc9966;
+  --stc-bg: #f5f5f0;
+  --stc-border: #d0d0c8;
+  --stc-success: #2e7d32;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  background: var(--stc-bg);
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Prevent iOS zoom on input focus */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Hide scrollbar but keep scrolling */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
