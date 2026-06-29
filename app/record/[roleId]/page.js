@@ -13,11 +13,14 @@ export default function RecordRolePage() {
   const roleId = params.roleId;
 
   const [role, setRole] = useState(null);
-  const [step, setStep] = useState('select'); // select | recording
+  const [step, setStep] = useState('select'); // select | trackSource | recording
   const [selectedType, setSelectedType] = useState(null); // song_1 | song_2 | scene
   const [showBlueprint, setShowBlueprint] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [trackSource, setTrackSource] = useState(null); // 'provided' | 'own' | 'acappella'
+  const [ownTrackUrl, setOwnTrackUrl] = useState(null);
+  const [ownTrackName, setOwnTrackName] = useState('');
 
   useEffect(() => {
     supabase.from('roles').select('*').eq('id', roleId).single().then(({ data }) => {
@@ -127,7 +130,7 @@ export default function RecordRolePage() {
 
             {/* Song 1 */}
             <div className="bg-white border border-stc-border rounded-lg p-4 mb-2"
-              onClick={() => { setSelectedType('song_1'); setStep('recording'); }}>
+              onClick={() => { setSelectedType('song_1'); setTrackSource(null); setOwnTrackUrl(null); setOwnTrackName(''); setStep('trackSource'); }}>
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-bold">♪ {role.song_1_title}</p>
@@ -139,7 +142,7 @@ export default function RecordRolePage() {
 
             {/* Song 2 */}
             <div className="bg-white border border-stc-border rounded-lg p-4 mb-4"
-              onClick={() => { setSelectedType('song_2'); setStep('recording'); }}>
+              onClick={() => { setSelectedType('song_2'); setTrackSource(null); setOwnTrackUrl(null); setOwnTrackName(''); setStep('trackSource'); }}>
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-bold">♪ {role.song_2_title}</p>
@@ -165,8 +168,8 @@ export default function RecordRolePage() {
           </>
         )}
 
-        {/* Camera Recording */}
-        {!uploading && !uploadSuccess && step === 'recording' && (
+        {/* Track Source Selection (songs only) */}
+        {!uploading && !uploadSuccess && step === 'trackSource' && (
           <>
             <div className="mb-3">
               <button onClick={() => setStep('select')}
@@ -174,22 +177,118 @@ export default function RecordRolePage() {
             </div>
 
             <h2 className="text-base font-bold mb-1">
+              {selectedType === 'song_1' ? role.song_1_title : role.song_2_title}
+            </h2>
+            <p className="text-xs text-stc-muted mb-4">{role.show_name} — {role.role_name}</p>
+
+            <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">How do you want to sing it?</p>
+
+            {/* Provided track — only if one exists */}
+            {((selectedType === 'song_1' && role.song_1_track_url) ||
+              (selectedType === 'song_2' && role.song_2_track_url)) && (
+              <div className="bg-white border border-stc-border rounded-lg p-4 mb-2 border-l-4 border-l-stc-accent"
+                onClick={() => { setTrackSource('provided'); setStep('recording'); }}>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-bold">♪ Use the standard track</p>
+                    <p className="text-[10px] text-stc-muted">Plays in your earbud. Same for everyone.</p>
+                  </div>
+                  <span className="text-gray-300 text-xl">›</span>
+                </div>
+              </div>
+            )}
+
+            {/* Bring your own track */}
+            <div className="bg-white border border-stc-border rounded-lg p-4 mb-2">
+              <div className="flex justify-between items-center">
+                <div className="flex-1">
+                  <p className="text-sm font-bold">⬆ Bring your own track</p>
+                  <p className="text-[10px] text-stc-muted">
+                    {ownTrackName ? `Selected: ${ownTrackName}` : 'Upload an MP3 you already own the rights to.'}
+                  </p>
+                </div>
+              </div>
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                id="own-track-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setOwnTrackName(file.name);
+                    setOwnTrackUrl(URL.createObjectURL(file));
+                  }
+                }}
+              />
+              {!ownTrackName ? (
+                <label htmlFor="own-track-input"
+                  className="block w-full text-center py-2.5 mt-2 bg-stc-bg border border-stc-border rounded-md text-xs font-semibold cursor-pointer">
+                  Choose Audio File
+                </label>
+              ) : (
+                <button onClick={() => { setTrackSource('own'); setStep('recording'); }}
+                  className="w-full py-2.5 mt-2 bg-stc-accent text-white rounded-md text-xs font-semibold">
+                  Use This Track & Record →
+                </button>
+              )}
+            </div>
+
+            {/* A cappella */}
+            <div className="bg-white border border-stc-border rounded-lg p-4 mb-2"
+              onClick={() => { setTrackSource('acappella'); setStep('recording'); }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold">🎤 Sing a cappella</p>
+                  <p className="text-[10px] text-stc-muted">No backing track. Just your voice.</p>
+                </div>
+                <span className="text-gray-300 text-xl">›</span>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mt-3">
+              <p className="text-[11px] leading-relaxed text-stc-dark">
+                <strong>Note:</strong> Standard backing tracks are coming soon. For now, bring a track you own or sing a cappella. Only upload audio you have the rights to use.
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Camera Recording */}
+        {!uploading && !uploadSuccess && step === 'recording' && (
+          <>
+            <div className="mb-3">
+              <button onClick={() => setStep(selectedType === 'scene' ? 'select' : 'trackSource')}
+                className="text-sm text-stc-link underline">← Back</button>
+            </div>
+
+            <h2 className="text-base font-bold mb-1">
               {role.show_name} — {role.role_name}
             </h2>
-            <p className="text-xs text-stc-muted mb-3">
+            <p className="text-xs text-stc-muted mb-1">
               {selectedType === 'song_1' ? role.song_1_title :
                selectedType === 'song_2' ? role.song_2_title :
                role.scene_title}
             </p>
+            {selectedType !== 'scene' && (
+              <p className="text-[10px] text-stc-muted mb-3">
+                {trackSource === 'provided' ? 'Standard track will play in your earbud.' :
+                 trackSource === 'own' ? `Your track: ${ownTrackName}` :
+                 'A cappella — no backing track.'}
+              </p>
+            )}
 
             <Camera
               trackUrl={
-                selectedType === 'song_1' ? role.song_1_track_url :
-                selectedType === 'song_2' ? role.song_2_track_url :
-                null
+                selectedType === 'scene' ? null :
+                trackSource === 'provided'
+                  ? (selectedType === 'song_1' ? role.song_1_track_url : role.song_2_track_url)
+                  : trackSource === 'own'
+                    ? ownTrackUrl
+                    : null
               }
               onRecordingComplete={handleRecordingComplete}
-              onCancel={() => setStep('select')}
+              onCancel={() => setStep(selectedType === 'scene' ? 'select' : 'trackSource')}
             />
           </>
         )}
