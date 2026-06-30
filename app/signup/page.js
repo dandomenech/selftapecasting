@@ -28,6 +28,7 @@ function SignupForm() {
       password,
       options: {
         data: { name, role: defaultRole },
+        emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
       },
     });
 
@@ -35,14 +36,6 @@ function SignupForm() {
       setError(authError.message);
       setLoading(false);
       return;
-    }
-
-    if (data.user) {
-      await supabase.from('profiles').update({
-        name,
-        role: defaultRole,
-        founding_member: true,
-      }).eq('id', data.user.id);
     }
 
     setSuccess(true);

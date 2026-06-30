@@ -21,9 +21,20 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO profiles (id, email, name)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'name', ''));
+  INSERT INTO profiles (id, email, name, role, founding_member)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', ''),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'performer'),
+    TRUE
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    role = COALESCE(NEW.raw_user_meta_data->>'role', profiles.role);
   RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
