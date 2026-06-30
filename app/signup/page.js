@@ -42,8 +42,10 @@ function SignupForm() {
     setLoading(false);
 
     if (data.session) {
-      if (defaultRole === 'casting' || defaultRole === 'agent') {
-        router.push('/browse');
+      if (defaultRole === 'casting') {
+        router.push('/breakdowns');
+      } else if (defaultRole === 'agent') {
+        router.push('/clients');
       } else {
         router.push('/portfolio');
       }

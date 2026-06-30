@@ -12,6 +12,7 @@ export default function BrowsePage() {
   const [performers, setPerformers] = useState([]);
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -20,6 +21,9 @@ export default function BrowsePage() {
   const loadData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/login'); return; }
+
+    const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    setUserRole(myProfile?.role || null);
 
     // Load all performers with their video counts
     const { data: profiles } = await supabase
@@ -62,10 +66,22 @@ export default function BrowsePage() {
       )
     : performers;
 
-  const tabs = [
-    { id: 'browse', label: 'Browse', icon: '🔍' },
-    { id: 'help', label: 'Help', icon: '✉' },
-  ];
+  const tabs = userRole === 'casting'
+    ? [
+        { id: 'browse', label: 'Browse', icon: '🔍' },
+        { id: 'post', label: 'Post Role', icon: '+' },
+        { id: 'breakdowns', label: 'My Posts', icon: '📋' },
+      ]
+    : userRole === 'agent'
+    ? [
+        { id: 'browse', label: 'Browse', icon: '🔍' },
+        { id: 'clients', label: 'My Clients', icon: '👥' },
+        { id: 'help', label: 'Help', icon: '✉' },
+      ]
+    : [
+        { id: 'browse', label: 'Browse', icon: '🔍' },
+        { id: 'help', label: 'Help', icon: '✉' },
+      ];
 
   return (
     <div className="min-h-screen bg-stc-bg">
@@ -140,6 +156,9 @@ export default function BrowsePage() {
         active="browse"
         onSelect={(id) => {
           if (id === 'help') router.push('/help');
+          if (id === 'post') router.push('/post-breakdown');
+          if (id === 'breakdowns') router.push('/breakdowns');
+          if (id === 'clients') router.push('/clients');
         }}
       />
     </div>

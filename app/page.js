@@ -18,8 +18,10 @@ export default function LandingPage() {
           .select('role')
           .eq('id', session.user.id)
           .single();
-        if (profile?.role === 'casting' || profile?.role === 'agent') {
-          router.push('/browse');
+        if (profile?.role === 'casting') {
+          router.push('/breakdowns');
+        } else if (profile?.role === 'agent') {
+          router.push('/clients');
         } else {
           router.push('/portfolio');
         }
