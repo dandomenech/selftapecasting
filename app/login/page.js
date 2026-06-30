@@ -21,7 +21,7 @@ function LoginForm() {
     setError('');
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
       setError(authError.message);
@@ -29,13 +29,25 @@ function LoginForm() {
       return;
     }
 
+    const userId = authData?.user?.id;
+
+    if (!userId) {
+      // Shouldn't happen, but fail safe rather than crash
+      router.push('/portfolio');
+      return;
+    }
+
     // Route based on account type — not everyone lands on the performer portfolio
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .single();
+
+    if (profileError) {
+      // Temporary visible debug — remove once routing is confirmed working
+      alert('DEBUG profile lookup error: ' + profileError.message);
+    }
 
     if (profile?.role === 'casting' || profile?.role === 'agent') {
       router.push('/browse');
