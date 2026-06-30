@@ -91,12 +91,26 @@ export default function BreakdownDetailPage() {
         </p>
 
         {/* Locked notice */}
-        <div className="bg-stc-bg border border-stc-border rounded-lg p-3 mb-4">
+        <div className="bg-stc-bg border border-stc-border rounded-lg p-3 mb-3">
           <p className="text-xs text-stc-muted leading-relaxed">
             This breakdown is a public record. Details are locked as published.
             {isOpen && ' The role moves to your Archive automatically when a performer is booked, or you can mark it as cast below.'}
           </p>
         </div>
+
+        {/* Quick navigation — Shortlist and Cast view */}
+        {isOpen && (
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => router.push(`/breakdowns/${breakdownId}/favorites`)}
+              className="flex-1 py-2.5 bg-white border border-stc-border rounded-md text-xs font-semibold text-stc-dark">
+              ★ Shortlist
+            </button>
+            <button onClick={() => router.push(`/breakdowns/${breakdownId}/cast`)}
+              className="flex-1 py-2.5 bg-white border border-stc-border rounded-md text-xs font-semibold text-stc-dark">
+              👥 View Cast
+            </button>
+          </div>
+        )}
 
         {/* Breakdown details — read-only */}
         <div className="bg-white border border-stc-border rounded-lg p-4 mb-4">
@@ -133,14 +147,14 @@ export default function BreakdownDetailPage() {
           submissions.map(sub => (
             <div key={sub.id} className="bg-white border border-stc-border rounded-lg p-3 mb-2">
               <div className="flex justify-between items-start">
-                <div className="flex-1 cursor-pointer" onClick={() => router.push(`/profile/${sub.performer_id}`)}>
+                <div className="flex-1 cursor-pointer" onClick={() => router.push(`/submissions/${sub.id}`)}>
                   <p className="text-sm font-bold">{sub.performer?.name}</p>
                   <p className="text-[10px] text-stc-muted">
                     {[sub.performer?.vocal_range, sub.performer?.location].filter(Boolean).join(' · ')}
                   </p>
-                  <p className="text-[10px] text-stc-link underline mt-0.5">View portfolio →</p>
+                  <p className="text-[10px] text-stc-link underline mt-0.5">Watch their tapes →</p>
                 </div>
-                <div className="flex-shrink-0 ml-2">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     sub.status === 'booked' ? 'bg-green-100 text-stc-success' :
                     sub.status === 'callback' ? 'bg-amber-100 text-stc-warning' :
@@ -163,7 +177,7 @@ export default function BreakdownDetailPage() {
                   )}
                   <button onClick={() => updateSubmissionStatus(sub.id, 'booked')}
                     className="text-[11px] px-2.5 py-1 bg-green-50 border border-green-200 text-stc-success rounded font-semibold">
-                    Book (auto-casts role)
+                    Book
                   </button>
                   {sub.status !== 'passed' && (
                     <button onClick={() => updateSubmissionStatus(sub.id, 'passed')}
