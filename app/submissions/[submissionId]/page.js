@@ -135,11 +135,14 @@ export default function SubmissionViewerPage() {
               </p>
             </div>
 
-            {/* Favorite star */}
+            {/* Shortlist button — labeled */}
             <button onClick={toggleFavorite}
-              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xl border
-                ${isFavorited ? 'bg-stc-gold border-stc-gold text-white' : 'bg-white border-stc-border text-gray-400'}`}>
-              ★
+              className={`flex-shrink-0 flex flex-col items-center justify-center px-2 py-2 rounded-lg border text-center min-w-[56px]
+                ${isFavorited ? 'bg-stc-gold border-stc-gold text-white' : 'bg-white border-stc-border text-stc-muted'}`}>
+              <span className="text-lg leading-none">★</span>
+              <span className="text-[9px] font-bold mt-0.5 leading-none">
+                {isFavorited ? 'Shortlisted' : 'Shortlist'}
+              </span>
             </button>
           </div>
         </div>
