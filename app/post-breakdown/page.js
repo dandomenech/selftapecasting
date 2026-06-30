@@ -12,12 +12,20 @@ const TABS = [
   { id: 'breakdowns', label: 'My Posts', icon: '📋' },
 ];
 
+const PAY_UNIT_LABELS = {
+  week: '/ week',
+  performance: '/ performance',
+  day: '/ day',
+  flat: 'flat / total run',
+};
+
 export default function PostBreakdownPage() {
   const router = useRouter();
   const [showName, setShowName] = useState('');
   const [roleName, setRoleName] = useState('');
   const [description, setDescription] = useState('');
-  const [payRate, setPayRate] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [payUnit, setPayUnit] = useState('');
   const [unionStatus, setUnionStatus] = useState('Either');
   const [location, setLocation] = useState('');
   const [skills, setSkills] = useState([]);
@@ -49,10 +57,18 @@ export default function PostBreakdownPage() {
       setError('Show name and role name are required.');
       return;
     }
-    if (!payRate.trim()) {
-      setError('Pay rate is required on every posting. Performers deserve to know before they audition.');
+    if (!payUnit) {
+      setError('Select how the pay is structured (per week, per performance, etc.) — a bare number isn\u2019t enough. Performers deserve to know the actual rate before they audition.');
       return;
     }
+    if (payUnit !== 'unpaid' && !payAmount.trim()) {
+      setError('Enter the pay amount, or select "Unpaid / Stipend" if there is no pay.');
+      return;
+    }
+
+    const payRate = payUnit === 'unpaid'
+      ? (payAmount.trim() ? `Unpaid — ${payAmount.trim()}` : 'Unpaid')
+      : `$${payAmount.trim()} ${PAY_UNIT_LABELS[payUnit]}`;
 
     // Safety net: if there's text sitting in the skill input that was never
     // explicitly added, sweep it in now rather than silently losing it.
@@ -85,7 +101,7 @@ export default function PostBreakdownPage() {
     }
 
     setSuccess(true);
-    setShowName(''); setRoleName(''); setDescription(''); setPayRate('');
+    setShowName(''); setRoleName(''); setDescription(''); setPayAmount(''); setPayUnit('');
     setUnionStatus('Either'); setLocation(''); setSkills([]);
 
     setTimeout(() => {
@@ -131,19 +147,40 @@ export default function PostBreakdownPage() {
                 placeholder="Brief notes on the role, rehearsal dates, etc." />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Pay Rate <span className="text-stc-accent">*</span></label>
-                <input type="text" value={payRate} onChange={e => setPayRate(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
-                  placeholder="$1,800/wk" />
+            <div>
+              <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Pay Rate <span className="text-stc-accent">*</span></label>
+              <p className="text-[11px] text-stc-muted mb-1.5">A number alone isn't enough — select how it's paid out.</p>
+              <div className="flex gap-2 mb-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stc-muted text-sm">$</span>
+                  <input type="text" inputMode="numeric" value={payAmount}
+                    onChange={e => setPayAmount(e.target.value.replace(/[^0-9,]/g, ''))}
+                    disabled={payUnit === 'unpaid'}
+                    className="w-full pl-6 pr-3 py-2.5 border border-stc-border rounded-md text-base bg-white disabled:bg-gray-100 disabled:text-stc-muted"
+                    placeholder="1,800" />
+                </div>
+                <select value={payUnit} onChange={e => setPayUnit(e.target.value)}
+                  className="flex-1 px-3 py-2.5 border border-stc-border rounded-md text-base bg-white">
+                  <option value="">Rate...</option>
+                  <option value="week">Per week</option>
+                  <option value="performance">Per performance</option>
+                  <option value="day">Per day</option>
+                  <option value="flat">Flat / total run</option>
+                  <option value="unpaid">Unpaid / Stipend</option>
+                </select>
               </div>
-              <div>
-                <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Location</label>
-                <input type="text" value={location} onChange={e => setLocation(e.target.value)}
+              {payUnit === 'unpaid' && (
+                <input type="text" value={payAmount} onChange={e => setPayAmount(e.target.value)}
                   className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
-                  placeholder="NYC" />
-              </div>
+                  placeholder="Optional: stipend amount or note" />
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Location</label>
+              <input type="text" value={location} onChange={e => setLocation(e.target.value)}
+                className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
+                placeholder="NYC" />
             </div>
 
             <div>
