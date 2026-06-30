@@ -12,6 +12,8 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState(null);
   const [videos, setVideos] = useState([]);
+  const [resume, setResume] = useState(null);
+  const [showResume, setShowResume] = useState(false);
   const [playingId, setPlayingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +36,15 @@ export default function ProfilePage() {
       .eq('status', 'live')
       .order('created_at', { ascending: false });
     setVideos(vids || []);
+
+    // Resume is only shown if the performer confirmed it
+    const { data: res } = await supabase
+      .from('resumes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'confirmed')
+      .maybeSingle();
+    setResume(res);
 
     // Record a view for analytics
     const { data: { session } } = await supabase.auth.getSession();
@@ -138,6 +149,57 @@ export default function ProfilePage() {
         {videos.length === 0 && (
           <div className="bg-white border border-stc-border rounded-lg p-6 text-center">
             <p className="text-sm text-stc-muted">No videos uploaded yet.</p>
+          </div>
+        )}
+
+        {/* Resume — secondary, collapsed by default */}
+        {resume && (resume.credits?.length > 0 || resume.collaborators?.length > 0 || resume.training?.length > 0) && (
+          <div className="mt-4">
+            <button onClick={() => setShowResume(!showResume)}
+              className="w-full flex items-center justify-between bg-white border border-stc-border rounded-lg px-4 py-3">
+              <span className="text-sm font-bold">Resume</span>
+              <span className="text-xs text-stc-muted">{showResume ? 'Hide ▲' : 'Show ▼'}</span>
+            </button>
+
+            {showResume && (
+              <div className="bg-white border border-t-0 border-stc-border rounded-b-lg p-4 -mt-1">
+                {resume.credits?.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Credits</p>
+                    {resume.credits.map((c, i) => (
+                      <div key={i} className="py-1.5 border-t border-gray-100 first:border-t-0">
+                        <p className="text-sm font-bold">{c.show} {c.role && <span className="font-normal text-stc-muted">— {c.role}</span>}</p>
+                        <p className="text-[11px] text-stc-muted">{[c.company, c.year].filter(Boolean).join(' · ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {resume.collaborators?.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Collaborators</p>
+                    {resume.collaborators.map((c, i) => (
+                      <div key={i} className="py-1.5 border-t border-gray-100 first:border-t-0">
+                        <p className="text-sm font-bold">{c.name} <span className="font-normal text-stc-muted">— {c.role}</span></p>
+                        {c.project && <p className="text-[11px] text-stc-muted">{c.project}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {resume.training?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Training</p>
+                    {resume.training.map((t, i) => (
+                      <div key={i} className="py-1.5 border-t border-gray-100 first:border-t-0">
+                        <p className="text-sm font-bold">{t.institution} {t.program && <span className="font-normal text-stc-muted">— {t.program}</span>}</p>
+                        <p className="text-[11px] text-stc-muted">{[t.instructor, t.note].filter(Boolean).join(' · ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>

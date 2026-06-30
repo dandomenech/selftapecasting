@@ -148,10 +148,17 @@ export default function PortfolioPage() {
             </div>
           </div>
 
-          <button onClick={() => router.push('/portfolio?edit=1')}
-            className="mt-3 text-xs text-stc-link underline">
-            Edit Profile
-          </button>
+          <div className="flex items-center gap-3 mt-3">
+            <button onClick={() => router.push('/portfolio?edit=1')}
+              className="text-xs text-stc-link underline">
+              Edit Profile
+            </button>
+            <span className="text-stc-border">·</span>
+            <button onClick={() => router.push('/resume')}
+              className="text-xs text-stc-link underline">
+              Resume
+            </button>
+          </div>
         </div>
 
         {/* View switcher */}

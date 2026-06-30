@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import TopNav from '@/components/TopNav';
 
 // Change this to your real admin email
-const ADMIN_EMAIL = 'dandomenech@gmail.com';
+const ADMIN_EMAIL = 'support@selftapecasting.com';
 
 export default function HelpPage() {
   const router = useRouter();
