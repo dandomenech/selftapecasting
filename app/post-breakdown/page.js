@@ -29,12 +29,17 @@ export default function PostBreakdownPage() {
   const [payUnit, setPayUnit] = useState('');
   const [unionStatus, setUnionStatus] = useState('Either');
   const [location, setLocation] = useState('');
+  const [closesAt, setClosesAt] = useState('');
   const [skills, setSkills] = useState([]);
   const [skillInput, setSkillInput] = useState('');
-  const [closesAt, setClosesAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Preview state
+  const [typoIssues, setTypoIssues] = useState([]);
+  const [typoChecking, setTypoChecking] = useState(false);
+  const [publishConfirmed, setPublishConfirmed] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -49,7 +54,6 @@ export default function PostBreakdownPage() {
       setSkillInput('');
     }
   };
-
   const removeSkill = (s) => setSkills(skills.filter(x => x !== s));
 
   const formattedPayRate = () => {
@@ -58,7 +62,7 @@ export default function PostBreakdownPage() {
     return `$${payAmount.trim()} ${PAY_UNIT_LABELS[payUnit]}`;
   };
 
-  const handleContinueToPreview = () => {
+  const handleContinueToPreview = async () => {
     setError('');
 
     if (!showName.trim() || !roleName.trim()) {
@@ -66,27 +70,51 @@ export default function PostBreakdownPage() {
       return;
     }
     if (!payUnit) {
-      setError('Select how the pay is structured (per week, per performance, etc.) \u2014 a bare number isn\u2019t enough.');
+      setError('Select how the pay is structured (per week, per performance, etc.)');
       return;
     }
     if (payUnit !== 'unpaid' && !payAmount.trim()) {
-      setError('Enter the pay amount, or select "Unpaid / Stipend" if there is no pay.');
+      setError('Enter the pay amount, or select "Unpaid / Stipend."');
       return;
     }
 
-    // Sweep in any skill text left in the box but never explicitly added
+    // Sweep in any unsaved skill text
     const leftover = skillInput.trim();
     if (leftover && !skills.includes(leftover)) {
-      setSkills([...skills, leftover]);
+      setSkills(prev => [...prev, leftover]);
     }
 
     setStep('preview');
+    setPublishConfirmed(false);
+    setTypoIssues([]);
+
+    // Run typo check in background — non-blocking
+    setTypoChecking(true);
+    try {
+      const res = await fetch('/api/typo-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          showName: showName.trim(),
+          roleName: roleName.trim(),
+          description: description.trim(),
+          location: location.trim(),
+          payRate: formattedPayRate(),
+        }),
+      });
+      const data = await res.json();
+      setTypoIssues(data.issues || []);
+    } catch {
+      // Silently skip on error
+    }
+    setTypoChecking(false);
   };
 
   const handlePublish = async () => {
+    if (!publishConfirmed) return;
     setSaving(true);
-    const { data: { session } } = await supabase.auth.getSession();
 
+    const { data: { session } } = await supabase.auth.getSession();
     const { error: insertError } = await supabase.from('breakdowns').insert({
       posted_by: session.user.id,
       show_name: showName.trim(),
@@ -103,7 +131,7 @@ export default function PostBreakdownPage() {
     setSaving(false);
 
     if (insertError) {
-      setError('Could not post the breakdown. Please try again.');
+      setError('Could not publish. Please try again.');
       setStep('form');
       return;
     }
@@ -132,18 +160,41 @@ export default function PostBreakdownPage() {
       <div className="min-h-screen bg-stc-bg">
         <TopNav />
         <main className="max-w-md mx-auto px-4 py-4 pb-24">
-          <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
-            <p className="text-sm font-bold text-stc-warning mb-1">⚠ This is about to go public</p>
-            <p className="text-xs text-stc-dark leading-relaxed">
-              Check every detail below \u2014 spelling, pay rate, skills. This is exactly what performers will see. You can still go back and fix anything before publishing.
+
+          {/* Permanent warning */}
+          <div className="bg-stc-dark rounded-lg p-4 mb-4 text-white">
+            <p className="text-base font-bold font-serif mb-1">This is permanent.</p>
+            <p className="text-xs leading-relaxed text-gray-300">
+              Once published, this breakdown is a public record. The details below are exactly what performers will see — and they cannot be changed after you publish. Read every word carefully.
             </p>
           </div>
 
-          {/* Exactly what a performer sees on /apply/[id] */}
+          {/* Typo check results */}
+          {typoChecking && (
+            <div className="bg-white border border-stc-border rounded-lg p-3 mb-3">
+              <p className="text-xs text-stc-muted">Checking for typos...</p>
+            </div>
+          )}
+          {!typoChecking && typoIssues.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-3">
+              <p className="text-xs font-bold text-stc-warning mb-2">⚠ Possible issues found — review before publishing:</p>
+              {typoIssues.map((issue, i) => (
+                <p key={i} className="text-xs text-stc-dark mb-1">• {issue}</p>
+              ))}
+              <p className="text-[11px] text-stc-muted mt-2">You can still publish through this — these are suggestions, not blocks.</p>
+            </div>
+          )}
+          {!typoChecking && typoIssues.length === 0 && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+              <p className="text-xs text-stc-success">✓ No typos or obvious errors found.</p>
+            </div>
+          )}
+
+          {/* Performer preview — exactly what they'll see */}
           <div className="bg-white border-2 border-stc-dark rounded-lg p-4 mb-4">
-            <p className="text-[10px] uppercase tracking-wider text-stc-muted mb-2">Performer preview</p>
-            <h2 className="text-2xl font-bold font-serif mb-1">{roleName || '(no role name)'}</h2>
-            <p className="text-xs text-stc-muted mb-1">{showName || '(no show name)'}</p>
+            <p className="text-[10px] uppercase tracking-wider text-stc-muted mb-2">What performers will see</p>
+            <h2 className="text-2xl font-bold font-serif mb-1">{roleName}</h2>
+            <p className="text-xs text-stc-muted mb-1">{showName}</p>
             <p className="text-[11px] text-stc-muted mb-3">
               {[formattedPayRate(), unionStatus, location].filter(Boolean).join(' · ')}
             </p>
@@ -152,8 +203,8 @@ export default function PostBreakdownPage() {
             )}
             {skills.length > 0 && (
               <>
-                <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Skills performers will be asked about</p>
-                <div className="flex flex-wrap gap-1.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Skills you're asking about</p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
                   {skills.map(s => (
                     <span key={s} className="text-xs bg-stc-bg border border-stc-border rounded-full px-3 py-1">{s}</span>
                   ))}
@@ -161,15 +212,22 @@ export default function PostBreakdownPage() {
               </>
             )}
             {closesAt && (
-              <p className="text-[11px] text-stc-muted mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[11px] text-stc-muted pt-3 border-t border-gray-100">
                 Submissions close: <strong>{new Date(closesAt).toLocaleDateString()}</strong>
               </p>
             )}
           </div>
 
-          <p className="text-[11px] text-stc-muted text-center mb-3">
-            After publishing, you can mark this role as cast — but the details above are locked.
-          </p>
+          {/* Confirmation checkbox — must check before Publish activates */}
+          <div className="bg-white border border-stc-border rounded-lg p-3 mb-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={publishConfirmed} onChange={e => setPublishConfirmed(e.target.checked)}
+                className="mt-0.5 flex-shrink-0 w-4 h-4" />
+              <span className="text-sm leading-relaxed">
+                I have read everything above and confirm it is correct. I understand this cannot be edited after publishing.
+              </span>
+            </label>
+          </div>
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-3">
@@ -179,12 +237,19 @@ export default function PostBreakdownPage() {
 
           <button onClick={() => setStep('form')}
             className="w-full py-3 mb-2 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
-            ← Edit Before Publishing
+            ← Go Back and Edit
           </button>
-          <button onClick={handlePublish} disabled={saving}
-            className="w-full py-3.5 bg-stc-accent text-white font-bold rounded-md text-base disabled:opacity-50 shadow-lg">
+
+          <button onClick={handlePublish} disabled={saving || !publishConfirmed}
+            className={`w-full py-4 font-bold rounded-md text-base shadow-lg transition-all
+              ${publishConfirmed
+                ? 'bg-stc-accent text-white'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
             {saving ? 'Publishing...' : 'Publish to Performers'}
           </button>
+          <p className="text-[10px] text-stc-muted text-center mt-2">
+            The publish button activates only after you check the box above.
+          </p>
         </main>
       </div>
     );
@@ -197,7 +262,7 @@ export default function PostBreakdownPage() {
       <main className="max-w-md mx-auto px-4 py-4 pb-24">
         <h1 className="text-2xl font-bold font-serif mb-1">Post a Role</h1>
         <p className="text-xs text-stc-muted mb-4">
-          Name the skills that actually matter for this role. Performers will check off only what you ask for \u2014 not a 300-item list.
+          Name the skills that actually matter for this role. Performers will check off only what you ask for — nothing more.
         </p>
 
         <div className="space-y-3">
@@ -224,7 +289,7 @@ export default function PostBreakdownPage() {
 
           <div>
             <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Pay Rate <span className="text-stc-accent">*</span></label>
-            <p className="text-[11px] text-stc-muted mb-1.5">A number alone isn't enough — select how it's paid out.</p>
+            <p className="text-[11px] text-stc-muted mb-1.5">A number alone is not enough — select how it is paid out.</p>
             <div className="flex gap-2 mb-2">
               <div className="relative flex-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stc-muted text-sm">$</span>
@@ -271,11 +336,10 @@ export default function PostBreakdownPage() {
             </div>
           </div>
 
-          {/* Skill requirements */}
           <div>
             <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Skills Required for This Role</label>
             <p className="text-[11px] text-stc-muted mb-2">
-              Only add skills that actually matter. Performers will see exactly these as yes/no checkmarks — nothing more.
+              Only add skills that actually matter. Performers see exactly these as yes/no checkmarks — nothing more.
             </p>
             <div className="flex gap-2 mb-2">
               <input type="text" value={skillInput} onChange={e => setSkillInput(e.target.value)}
@@ -302,7 +366,7 @@ export default function PostBreakdownPage() {
           <div>
             <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Submissions Close (optional)</label>
             <p className="text-[11px] text-stc-muted mb-2">
-              Once published, this can't be changed. After this date, performers will see the role as expired.
+              After this date, the role automatically shows as expired to performers.
             </p>
             <input type="date" value={closesAt} onChange={e => setClosesAt(e.target.value)}
               className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white" />
