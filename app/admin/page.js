@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 
 // Simple gate — change this to your own admin password.
 // This is light protection (the real security is that only you know the URL + password).
-const ADMIN_PASSWORD = 'changeme-admin';
+const ADMIN_PASSWORD = 'Singitup';
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
