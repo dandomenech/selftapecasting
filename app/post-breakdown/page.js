@@ -54,6 +54,14 @@ export default function PostBreakdownPage() {
       return;
     }
 
+    // Safety net: if there's text sitting in the skill input that was never
+    // explicitly added, sweep it in now rather than silently losing it.
+    let finalSkills = skills;
+    const leftover = skillInput.trim();
+    if (leftover && !finalSkills.includes(leftover)) {
+      finalSkills = [...finalSkills, leftover];
+    }
+
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -65,7 +73,7 @@ export default function PostBreakdownPage() {
       pay_rate: payRate.trim(),
       union_status: unionStatus,
       location: location.trim(),
-      required_skills: skills,
+      required_skills: finalSkills,
       status: 'open',
     });
 
@@ -161,7 +169,7 @@ export default function PostBreakdownPage() {
                 <input type="text" value={skillInput} onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
                   className="flex-1 px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
-                  placeholder="e.g. Stage Combat" />
+                  placeholder="Type a skill, then tap Add" />
                 <button type="button" onClick={addSkill}
                   className="px-4 py-2.5 bg-stc-dark text-white rounded-md text-sm font-semibold">
                   Add
