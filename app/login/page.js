@@ -29,7 +29,19 @@ function LoginForm() {
       return;
     }
 
-    router.push('/portfolio');
+    // Route based on account type — not everyone lands on the performer portfolio
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profile?.role === 'casting' || profile?.role === 'agent') {
+      router.push('/browse');
+    } else {
+      router.push('/portfolio');
+    }
   };
 
   return (

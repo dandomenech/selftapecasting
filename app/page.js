@@ -9,11 +9,23 @@ export default function LandingPage() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
-  // If already logged in, redirect to portfolio
+  // If already logged in, redirect based on account type
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push('/portfolio');
-      else setChecking(false);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        if (profile?.role === 'casting' || profile?.role === 'agent') {
+          router.push('/browse');
+        } else {
+          router.push('/portfolio');
+        }
+      } else {
+        setChecking(false);
+      }
     });
   }, [router]);
 

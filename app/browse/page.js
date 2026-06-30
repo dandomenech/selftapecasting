@@ -63,9 +63,8 @@ export default function BrowsePage() {
     : performers;
 
   const tabs = [
-    { id: 'portfolio', label: 'Portfolio', icon: '👤' },
-    { id: 'record', label: 'Record', icon: '⏺' },
     { id: 'browse', label: 'Browse', icon: '🔍' },
+    { id: 'help', label: 'Help', icon: '✉' },
   ];
 
   return (
@@ -140,8 +139,7 @@ export default function BrowsePage() {
         tabs={tabs}
         active="browse"
         onSelect={(id) => {
-          if (id === 'portfolio') router.push('/portfolio');
-          if (id === 'record') router.push('/record');
+          if (id === 'help') router.push('/help');
         }}
       />
     </div>

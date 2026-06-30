@@ -42,7 +42,11 @@ function SignupForm() {
     setLoading(false);
 
     if (data.session) {
-      router.push('/portfolio');
+      if (defaultRole === 'casting' || defaultRole === 'agent') {
+        router.push('/browse');
+      } else {
+        router.push('/portfolio');
+      }
     }
   };
 
