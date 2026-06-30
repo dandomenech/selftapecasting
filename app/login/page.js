@@ -38,16 +38,11 @@ function LoginForm() {
     }
 
     // Route based on account type — not everyone lands on the performer portfolio
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', userId)
       .single();
-
-    if (profileError) {
-      // Temporary visible debug — remove once routing is confirmed working
-      alert('DEBUG profile lookup error: ' + profileError.message);
-    }
 
     if (profile?.role === 'casting' || profile?.role === 'agent') {
       router.push('/browse');
