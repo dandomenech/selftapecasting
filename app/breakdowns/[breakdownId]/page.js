@@ -42,6 +42,7 @@ export default function BreakdownDetailPage() {
       .from('submissions')
       .select('*, performer:performer_id(name, vocal_range, location)')
       .eq('breakdown_id', breakdownId)
+      .neq('status', 'withdrawn')
       .order('created_at', { ascending: false });
     setSubmissions(subs || []);
 

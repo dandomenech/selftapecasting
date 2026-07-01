@@ -52,7 +52,8 @@ export default function BreakdownsPage() {
         const { count } = await supabase
           .from('submissions')
           .select('*', { count: 'exact', head: true })
-          .eq('breakdown_id', b.id);
+          .eq('breakdown_id', b.id)
+          .neq('status', 'withdrawn');
         counts[b.id] = count || 0;
       }
       setSubmissionCounts(counts);

@@ -163,7 +163,7 @@ export default function PortfolioPage() {
           </div>
 
           <div className="flex items-center gap-3 mt-3">
-            <button onClick={() => router.push('/portfolio?edit=1')}
+            <button onClick={() => router.push('/profile/edit')}
               className="text-xs text-stc-link underline">
               Edit Profile
             </button>

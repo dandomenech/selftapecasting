@@ -18,6 +18,12 @@ export default function CallbackDetailPage() {
   const [confirming, setConfirming] = useState(false);
   const [availability, setAvailability] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [declined, setDeclined] = useState(false);
+
+  // Decline state
+  const [showDeclineSheet, setShowDeclineSheet] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [declining, setDeclining] = useState(false);
 
   // Camera / recording state
   const [showCamera, setShowCamera] = useState(false);
@@ -45,7 +51,34 @@ export default function CallbackDetailPage() {
     setBreakdown(cb.breakdown);
     setCasting(cb.casting);
     setConfirmed(cb.performer_confirmed);
+    setDeclined(cb.status === 'declined');
     setLoading(false);
+  };
+
+  const handleDecline = async () => {
+    setDeclining(true);
+    const { data: { session } } = await supabase.auth.getSession();
+
+    await supabase.from('callbacks').update({
+      status: 'declined',
+      decline_reason: declineReason.trim(),
+      declined_at: new Date().toISOString(),
+    }).eq('id', callbackId);
+
+    // Let casting know via the audit trail, without exposing anything punitive
+    await supabase.from('submission_changes').insert({
+      submission_id: callback.submission_id,
+      changed_by: session.user.id,
+      change_type: 'callback_declined',
+      change_summary: declineReason.trim()
+        ? `Performer declined the callback: ${declineReason.trim().substring(0, 100)}`
+        : 'Performer declined the callback.',
+      seen_by_performer: true,
+    });
+
+    setDeclining(false);
+    setShowDeclineSheet(false);
+    setDeclined(true);
   };
 
   const handleConfirm = async () => {
@@ -156,7 +189,7 @@ export default function CallbackDetailPage() {
           <button onClick={() => setShowCamera(false)}
             className="text-sm text-stc-link underline mb-3">← Back to callback</button>
           <h2 className="text-base font-bold mb-1">Recording callback footage</h2>
-          <p className="text-xs text-stc-muted mb-3">{breakdown?.role_name} — {breakdown?.show_name}</p>
+          <p className="text-xs text-stc-muted mb-3">{breakdown?.role_name} - {breakdown?.show_name}</p>
           {callback.instructions && (
             <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
               <p className="text-[11px] leading-relaxed"><strong>What they need:</strong> {callback.instructions}</p>
@@ -217,7 +250,7 @@ export default function CallbackDetailPage() {
         <div className="rounded-lg p-4 mb-4 text-white"
           style={{ background: isFinal ? '#c67100' : '#1a1a2e' }}>
           <p className="text-[11px] font-bold uppercase tracking-wider mb-1 opacity-80">
-            {isFinal ? '⭐ Final Callback' : '↩ Callback'}
+            {isFinal ? 'Final Callback' : 'Callback'}
           </p>
           <p className="text-xl font-bold font-serif">{breakdown?.role_name}</p>
           <p className="text-sm opacity-80">{breakdown?.show_name}</p>
@@ -247,22 +280,29 @@ export default function CallbackDetailPage() {
         </div>
 
         {/* ── Next step ── */}
-        {confirmed ? (
+        {declined ? (
+          <div className="bg-stc-bg border border-stc-border rounded-lg p-4 text-center">
+            <p className="text-sm font-bold mb-1">You declined this callback</p>
+            <p className="text-xs text-stc-muted leading-relaxed">
+              That's completely fine - casting has been notified. Declining a callback never counts against you here.
+            </p>
+          </div>
+        ) : confirmed ? (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-sm font-bold text-stc-success mb-1">✓ Confirmed</p>
+            <p className="text-sm font-bold text-stc-success mb-1">Confirmed</p>
             <p className="text-xs text-stc-muted mb-3">
               {callback.format === 'new_video' || callback.format === 'either'
-                ? 'Record your new footage below — it goes directly to casting.'
+                ? 'Record your new footage below. It goes directly to casting.'
                 : 'The casting director has been notified.'}
             </p>
             {(callback.format === 'new_video' || callback.format === 'either') && (
               <>
                 {uploadSuccess ? (
-                  <p className="text-xs text-stc-success font-bold">✓ New footage submitted</p>
+                  <p className="text-xs text-stc-success font-bold">New footage submitted</p>
                 ) : (
                   <button onClick={() => setShowCamera(true)}
                     className="w-full py-3 bg-stc-accent text-white font-semibold rounded-md text-sm">
-                    ⏺ Record New Footage
+                    Record New Footage
                   </button>
                 )}
               </>
@@ -280,7 +320,7 @@ export default function CallbackDetailPage() {
                 </p>
                 <textarea value={availability} onChange={e => setAvailability(e.target.value)}
                   className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white min-h-[80px] mb-3"
-                  placeholder="e.g. Available Mon–Fri after 2pm. Best number: 555-867-5309" />
+                  placeholder="e.g. Available Mon-Fri after 2pm. Best number: 555-867-5309" />
                 <button onClick={handleConfirm} disabled={confirming || !availability.trim()}
                   className="w-full py-3 bg-stc-accent text-white font-semibold rounded-md text-sm disabled:opacity-50">
                   {confirming ? 'Confirming...' : 'Confirm Callback'}
@@ -300,7 +340,7 @@ export default function CallbackDetailPage() {
                 </button>
                 <button onClick={() => setShowCamera(true)}
                   className="w-full py-3 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
-                  ⏺ Record New Footage
+                  Record New Footage
                 </button>
               </>
             )}
@@ -334,14 +374,45 @@ export default function CallbackDetailPage() {
                 {availability === 'new_video' && (
                   <button onClick={() => setShowCamera(true)}
                     className="w-full py-3 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
-                    ⏺ Record New Footage
+                    Record New Footage
                   </button>
                 )}
               </>
             )}
+
+            {/* Decline — always available while pending. The actor stays in control of their time. */}
+            <button onClick={() => setShowDeclineSheet(true)}
+              className="w-full py-2.5 mt-3 text-xs text-stc-muted underline">
+              Can't make this callback? Decline
+            </button>
           </div>
         )}
       </main>
+
+      {/* ── Decline sheet ── */}
+      {showDeclineSheet && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => !declining && setShowDeclineSheet(false)}>
+          <div className="bg-white w-full max-h-[90vh] overflow-auto rounded-t-2xl p-4" onClick={e => e.stopPropagation()}>
+            <div className="w-9 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+            <h2 className="text-lg font-bold font-serif mb-1">Decline this callback</h2>
+            <p className="text-xs text-stc-muted mb-4 leading-relaxed">
+              No problem at all. A quick reason helps casting plan, but it's optional. This won't count against you.
+            </p>
+            <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Reason (optional)</label>
+            <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)}
+              className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white min-h-[80px] mb-3"
+              placeholder="e.g. Booked another job for those dates. Thank you for the consideration." />
+            <button onClick={handleDecline} disabled={declining}
+              className="w-full py-3 bg-stc-dark text-white font-semibold rounded-md text-sm disabled:opacity-50 mb-2">
+              {declining ? 'Sending...' : 'Send Decline'}
+            </button>
+            <button onClick={() => setShowDeclineSheet(false)} disabled={declining}
+              className="w-full py-3 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
+              Never mind, keep it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
