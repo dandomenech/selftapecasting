@@ -89,7 +89,7 @@ export default function BlueprintSheet({ onClose }) {
             ['Fill light', '45° right, slightly above eye level. Softer. Fills in shadow.'],
             ['Camera', 'Directly in front on tripod. Lens at eye level. 4–6 ft away.'],
             ['Background', 'Solid, plain wall. Stand 3–5 ft from wall.'],
-            ['Framing', 'Chest up, centered. Small headroom above hair.'],
+            ['Framing', '3/4 body or full body, centered. Adjust your tripod distance — no digital zoom.'],
             ['Audio', 'One earbud in. Other ear open. Platform mixes automatically.'],
           ].map(([label, desc], i) => (
             <div key={i} className={i > 0 ? 'border-t border-gray-100 pt-2' : ''}>

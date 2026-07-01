@@ -28,8 +28,12 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facing,
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
+          // Use the device's native field of view — no forced resolution
+          // that maps to a telephoto/cropped sensor. Performer controls
+          // framing physically by moving their tripod.
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 16 / 9 },
         },
         audio: true,
       });
@@ -155,7 +159,7 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
     <div className="relative">
       {/* ── Camera Preview / Recording ── */}
       {(phase === 'preview' || phase === 'countdown' || phase === 'recording') && (
-        <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '9/16' }}>
+        <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
           <video
             ref={videoRef}
             autoPlay
@@ -165,12 +169,12 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
           />
 
-          {/* Framing guide */}
+          {/* Framing guide — 3/4 body, not close-up */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="border-2 border-dashed border-white/40 rounded-md w-[60%] h-[55%]
+            <div className="border-2 border-dashed border-white/40 rounded-md w-[35%] h-[85%]
                           flex items-end justify-center pb-3">
-              <span className="text-white/50 text-[10px] uppercase tracking-widest">
-                chest up — center
+              <span className="text-white/50 text-[9px] uppercase tracking-widest text-center leading-relaxed px-1">
+                3/4 body{'\n'}adjust tripod
               </span>
             </div>
           </div>
@@ -194,7 +198,7 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
 
       {/* ── Review (playback) ── */}
       {phase === 'review' && recordedUrl && (
-        <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '9/16' }}>
+        <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
           <video
             src={recordedUrl}
             controls
