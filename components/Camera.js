@@ -18,13 +18,40 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
   const [recordedUrl, setRecordedUrl] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
 
-  const toggleFullscreen = () => {
+  useEffect(() => {
+    const checkOrientation = () => setIsPortrait(window.innerHeight > window.innerWidth);
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+    return () => {
+      window.removeEventListener('resize', checkOrientation);
+      window.removeEventListener('orientationchange', checkOrientation);
+    };
+  }, []);
+
+  // Safety net — if the phone rotates back to portrait mid-recording, stop immediately
+  // rather than capturing a tape that flips orientation partway through
+  useEffect(() => {
+    if (isPortrait && phase === 'recording') {
+      stopRecording();
+    }
+  }, [isPortrait, phase]);
+
+  const toggleFullscreen = async () => {
     const el = containerRef.current;
     if (!el) return;
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-      el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
+      await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.());
+      // Lock to landscape — tapes should always be shot horizontal, never vertical
+      try {
+        await screen.orientation?.lock?.('landscape');
+      } catch {
+        // Orientation lock isn't supported on all browsers (e.g. iOS Safari) — fail silently
+      }
     } else {
+      try { screen.orientation?.unlock?.(); } catch {}
       document.exitFullscreen?.() || document.webkitExitFullscreen?.();
     }
   };
@@ -112,6 +139,11 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
       setRecordedBlob(blob);
       setRecordedUrl(URL.createObjectURL(blob));
       setPhase('review');
+      // Exit fullscreen automatically so upload/re-record controls are visible
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        try { screen.orientation?.unlock?.(); } catch {}
+        (document.exitFullscreen?.() || document.webkitExitFullscreen?.());
+      }
     };
     mr.start(1000);
     mediaRecorderRef.current = mr;
@@ -161,6 +193,22 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
               transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
             }}
           />
+
+          {/* Rotate prompt — blocks recording while in portrait */}
+          {isPortrait && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 30,
+              background: 'rgba(0,0,0,0.9)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: 20, textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>⟲</div>
+              <p style={{ color: 'white', fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Rotate your phone</p>
+              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 1.5, maxWidth: 260 }}>
+                Tapes are recorded horizontal (landscape) only. Turn your phone sideways to continue.
+              </p>
+            </div>
+          )}
 
           {/* Top left — fullscreen */}
           <button onClick={toggleFullscreen} style={{

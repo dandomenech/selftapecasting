@@ -7,13 +7,15 @@ import TopNav from '@/components/TopNav';
 import Camera from '@/components/Camera';
 import BlueprintSheet from '@/components/BlueprintSheet';
 
+const FREE_TAPE_LIMIT = 6;
+
 export default function RecordRolePage() {
   const router = useRouter();
   const params = useParams();
   const roleId = params.roleId;
 
   const [role, setRole] = useState(null);
-  const [step, setStep] = useState('select'); // select | trackSource | recording
+  const [step, setStep] = useState('select'); // select | trackSource | recording | capReached
   const [selectedType, setSelectedType] = useState(null); // song_1 | song_2 | scene
   const [showBlueprint, setShowBlueprint] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -21,18 +23,59 @@ export default function RecordRolePage() {
   const [trackSource, setTrackSource] = useState(null); // 'provided' | 'own' | 'acappella'
   const [ownTrackUrl, setOwnTrackUrl] = useState(null);
   const [ownTrackName, setOwnTrackName] = useState('');
+  const [tapeCount, setTapeCount] = useState(null);
+  const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
     supabase.from('roles').select('*').eq('id', roleId).single().then(({ data }) => {
       setRole(data);
     });
+    checkTapeCount();
   }, [roleId]);
 
-  const handleRecordingComplete = async (blob) => {
-    setUploading(true);
+  const checkTapeCount = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
 
+    const { data: prof } = await supabase.from('profiles').select('pro_tier').eq('id', session.user.id).single();
+    setIsPro(!!prof?.pro_tier);
+
+    const { count } = await supabase
+      .from('videos')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', session.user.id)
+      .eq('status', 'live');
+    setTapeCount(count || 0);
+  };
+
+  // Guard used before entering the recording flow — blocks early if at the cap
+  const guardedGoTo = (nextStep) => {
+    if (!isPro && tapeCount !== null && tapeCount >= FREE_TAPE_LIMIT) {
+      setStep('capReached');
+      return;
+    }
+    setStep(nextStep);
+  };
+
+  const handleRecordingComplete = async (blob) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/login'); return; }
+
+    // Safety-net cap check right before upload
+    if (!isPro) {
+      const { count } = await supabase
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('status', 'live');
+
+      if ((count || 0) >= FREE_TAPE_LIMIT) {
+        setStep('capReached');
+        return;
+      }
+    }
+
+    setUploading(true);
 
     const userId = session.user.id;
     const fileName = `${userId}/${roleId}_${selectedType}_${Date.now()}.webm`;
@@ -105,6 +148,29 @@ export default function RecordRolePage() {
           </div>
         )}
 
+        {/* Storage cap reached */}
+        {!uploading && !uploadSuccess && step === 'capReached' && (
+          <div className="bg-white border border-stc-border rounded-lg p-6 text-center">
+            <div className="text-3xl mb-3">📼</div>
+            <p className="text-base font-bold mb-2">You've used all {FREE_TAPE_LIMIT} free tapes</p>
+            <p className="text-sm text-stc-muted leading-relaxed mb-4">
+              Founding members get {FREE_TAPE_LIMIT} tapes free — enough for two full roles. To record more, delete an older tape from your portfolio, or upgrade to Pro for more storage.
+            </p>
+            <div className="bg-stc-bg border border-stc-border rounded-lg p-3 mb-4 text-left">
+              <p className="text-xs font-bold mb-1">Pro (coming soon)</p>
+              <p className="text-[11px] text-stc-muted">More storage, priority placement in casting search, full watcher analytics.</p>
+            </div>
+            <button onClick={() => router.push('/portfolio')}
+              className="w-full py-3 bg-stc-dark text-white font-semibold rounded-md text-sm mb-2">
+              Manage My Tapes
+            </button>
+            <button onClick={() => setStep('select')}
+              className="w-full py-2.5 text-xs text-stc-muted">
+              ← Back
+            </button>
+          </div>
+        )}
+
         {/* Song/Scene Selection */}
         {!uploading && !uploadSuccess && step === 'select' && (
           <>
@@ -114,7 +180,13 @@ export default function RecordRolePage() {
             </div>
 
             <h1 className="text-2xl font-bold font-serif mb-1">{role.role_name}</h1>
-            <p className="text-xs text-stc-muted mb-4">{role.show_name}</p>
+            <p className="text-xs text-stc-muted mb-2">{role.show_name}</p>
+
+            {!isPro && tapeCount !== null && (
+              <p className={`text-[11px] mb-3 ${tapeCount >= FREE_TAPE_LIMIT ? 'text-stc-accent font-bold' : 'text-stc-muted'}`}>
+                {tapeCount} / {FREE_TAPE_LIMIT} free tapes used
+              </p>
+            )}
 
             {/* Setup guides */}
             <div className="bg-stc-bg border border-stc-border rounded-lg p-3 mb-4">
@@ -130,7 +202,7 @@ export default function RecordRolePage() {
 
             {/* Song 1 */}
             <div className="bg-white border border-stc-border rounded-lg p-4 mb-2"
-              onClick={() => { setSelectedType('song_1'); setTrackSource(null); setOwnTrackUrl(null); setOwnTrackName(''); setStep('trackSource'); }}>
+              onClick={() => { setSelectedType('song_1'); setTrackSource(null); setOwnTrackUrl(null); setOwnTrackName(''); guardedGoTo('trackSource'); }}>
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-bold">♪ {role.song_1_title}</p>
@@ -142,7 +214,7 @@ export default function RecordRolePage() {
 
             {/* Song 2 */}
             <div className="bg-white border border-stc-border rounded-lg p-4 mb-4"
-              onClick={() => { setSelectedType('song_2'); setTrackSource(null); setOwnTrackUrl(null); setOwnTrackName(''); setStep('trackSource'); }}>
+              onClick={() => { setSelectedType('song_2'); setTrackSource(null); setOwnTrackUrl(null); setOwnTrackName(''); guardedGoTo('trackSource'); }}>
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-bold">♪ {role.song_2_title}</p>
@@ -156,7 +228,7 @@ export default function RecordRolePage() {
 
             {/* Scene */}
             <div className="bg-white border border-stc-border rounded-lg p-4 border-l-4 border-l-stc-accent"
-              onClick={() => { setSelectedType('scene'); setStep('recording'); }}>
+              onClick={() => { setSelectedType('scene'); guardedGoTo('recording'); }}>
               <div className="flex justify-between items-center">
                 <div className="flex-1">
                   <p className="text-sm font-bold">◊ {role.scene_title}</p>
@@ -187,7 +259,7 @@ export default function RecordRolePage() {
             {((selectedType === 'song_1' && role.song_1_track_url) ||
               (selectedType === 'song_2' && role.song_2_track_url)) && (
               <div className="bg-white border border-stc-border rounded-lg p-4 mb-2 border-l-4 border-l-stc-accent"
-                onClick={() => { setTrackSource('provided'); setStep('recording'); }}>
+                onClick={() => { setTrackSource('provided'); guardedGoTo('recording'); }}>
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-sm font-bold">♪ Use the standard track</p>
@@ -227,7 +299,7 @@ export default function RecordRolePage() {
                   Choose Audio File
                 </label>
               ) : (
-                <button onClick={() => { setTrackSource('own'); setStep('recording'); }}
+                <button onClick={() => { setTrackSource('own'); guardedGoTo('recording'); }}
                   className="w-full py-2.5 mt-2 bg-stc-accent text-white rounded-md text-xs font-semibold">
                   Use This Track & Record →
                 </button>
@@ -236,7 +308,7 @@ export default function RecordRolePage() {
 
             {/* A cappella */}
             <div className="bg-white border border-stc-border rounded-lg p-4 mb-2"
-              onClick={() => { setTrackSource('acappella'); setStep('recording'); }}>
+              onClick={() => { setTrackSource('acappella'); guardedGoTo('recording'); }}>
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-bold">🎤 Sing a cappella</p>
