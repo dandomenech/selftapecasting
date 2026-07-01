@@ -8,47 +8,53 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
   const audioRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const timerRef = useRef(null);
+  const containerRef = useRef(null);
 
-  const [phase, setPhase] = useState('preview'); // preview | countdown | recording | review
+  const [phase, setPhase] = useState('preview');
   const [countdownNum, setCountdownNum] = useState(3);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordedUrl, setRecordedUrl] = useState(null);
-  const [facingMode, setFacingMode] = useState('user'); // user = front, environment = rear
-  const containerRef = useRef(null);
-  const timerRef = useRef(null);
+  const [facingMode, setFacingMode] = useState('user');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const toggleFullscreen = () => {
     const el = containerRef.current;
     if (!el) return;
-    if (!document.fullscreenElement) {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
       el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
     } else {
       document.exitFullscreen?.() || document.webkitExitFullscreen?.();
     }
   };
 
-  // Start camera stream
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+  }, []);
+
   const startCamera = useCallback(async (facing) => {
     try {
-      // Stop existing stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facing,
-          // Use the device's native field of view — no forced resolution
-          // that maps to a telephoto/cropped sensor. Performer controls
-          // framing physically by moving their tripod.
           width: { ideal: 1280 },
           height: { ideal: 720 },
           aspectRatio: { ideal: 16 / 9 },
         },
         audio: true,
       });
-
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -62,18 +68,13 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
   useEffect(() => {
     startCamera(facingMode);
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [facingMode, startCamera]);
 
-  const switchCamera = () => {
-    setFacingMode(f => f === 'user' ? 'environment' : 'user');
-  };
+  const switchCamera = () => setFacingMode(f => f === 'user' ? 'environment' : 'user');
 
-  // Start countdown then recording
   const startCountdown = () => {
     setPhase('countdown');
     setCountdownNum(3);
@@ -83,80 +84,52 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
       if (n <= 0) {
         clearInterval(iv);
         startRecording();
-        return;
+      } else {
+        setCountdownNum(n);
       }
-      setCountdownNum(n);
     }, 1000);
   };
 
   const startRecording = () => {
-    chunksRef.current = [];
-    setRecordingTime(0);
-    setPhase('recording');
+    if (!streamRef.current) return;
 
-    // Start backing track
     if (trackUrl) {
-      audioRef.current = new Audio(trackUrl);
-      audioRef.current.play().catch(console.error);
+      if (!audioRef.current) audioRef.current = new Audio(trackUrl);
+      audioRef.current.play().catch(e => console.warn('Track play error:', e));
     }
 
-    // Determine supported MIME type
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-      ? 'video/webm;codecs=vp9'
-      : MediaRecorder.isTypeSupported('video/webm')
-        ? 'video/webm'
-        : 'video/mp4';
-
-    const recorder = new MediaRecorder(streamRef.current, { mimeType });
-    mediaRecorderRef.current = recorder;
-
-    recorder.ondataavailable = (e) => {
+    chunksRef.current = [];
+    const mr = new MediaRecorder(streamRef.current, {
+      mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+        ? 'video/webm;codecs=vp9,opus'
+        : 'video/webm',
+    });
+    mr.ondataavailable = e => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const url = URL.createObjectURL(blob);
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       setRecordedBlob(blob);
-      setRecordedUrl(url);
+      setRecordedUrl(URL.createObjectURL(blob));
       setPhase('review');
     };
+    mr.start(1000);
+    mediaRecorderRef.current = mr;
 
-    recorder.start(1000); // Collect data every second
-
-    // Timer
-    timerRef.current = setInterval(() => {
-      setRecordingTime(t => {
-        if (t >= 300) { // 5 minute max
-          stopRecording();
-          return t;
-        }
-        return t + 1;
-      });
-    }, 1000);
+    setRecordingTime(0);
+    setPhase('recording');
+    timerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
     if (timerRef.current) clearInterval(timerRef.current);
-  };
-
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
   };
 
   const handleUpload = () => {
-    if (recordedBlob) {
-      onRecordingComplete(recordedBlob);
-    }
+    if (recordedBlob) onRecordingComplete(recordedBlob);
   };
 
   const handleReRecord = () => {
@@ -166,73 +139,100 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
     startCamera(facingMode);
   };
 
+  const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  const cameraStyle = isFullscreen
+    ? { position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 9999, background: 'black' }
+    : { position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '0.5rem', overflow: 'hidden', background: 'black' };
+
   return (
-    <div className="relative" ref={containerRef}>
-      {/* ── Camera Preview / Recording ── */}
+    <div ref={containerRef}>
+      {/* ── Camera / Recording ── */}
       {(phase === 'preview' || phase === 'countdown' || phase === 'recording') && (
-        <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+        <div style={cameraStyle}>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              objectFit: 'cover',
+              transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+            }}
           />
 
-          {/* Fullscreen toggle — top left */}
-          <button onClick={toggleFullscreen}
-            className="absolute top-3 left-3 bg-black/50 text-white rounded-md px-2.5 py-1.5 text-xs font-semibold z-20">
-            ⛶ Full Screen
+          {/* Top left — fullscreen */}
+          <button onClick={toggleFullscreen} style={{
+            position: 'absolute', top: 12, left: 12, zIndex: 20,
+            background: 'rgba(0,0,0,0.5)', color: 'white',
+            border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}>
+            {isFullscreen ? 'Exit' : 'Full Screen'}
           </button>
 
-          {/* Switch camera — top right */}
+          {/* Top right — flip or REC */}
           {phase === 'preview' && (
-            <button onClick={switchCamera}
-              className="absolute top-3 right-3 bg-black/50 text-white rounded-md px-2.5 py-1.5 text-xs font-semibold z-20">
-              ↺ Flip
+            <button onClick={switchCamera} style={{
+              position: 'absolute', top: 12, right: 12, zIndex: 20,
+              background: 'rgba(0,0,0,0.5)', color: 'white',
+              border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>
+              Flip
             </button>
           )}
-
-          {/* Recording indicator — top right during recording */}
           {phase === 'recording' && (
-            <div className="absolute top-3 right-3 bg-black/60 px-2.5 py-1 rounded text-red-500 text-sm font-bold z-20">
-              ● REC {formatTime(recordingTime)}
+            <div style={{
+              position: 'absolute', top: 12, right: 12, zIndex: 20,
+              background: 'rgba(0,0,0,0.6)', color: '#ef4444',
+              borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700,
+            }}>
+              REC {formatTime(recordingTime)}
             </div>
           )}
 
           {/* Countdown overlay */}
           {phase === 'countdown' && (
-            <div className="absolute inset-0 bg-black/85 flex items-center justify-center z-20">
-              <span className="text-white text-8xl font-bold font-serif">{countdownNum}</span>
+            <div style={{
+              position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20,
+            }}>
+              <span style={{ color: 'white', fontSize: 96, fontWeight: 700 }}>{countdownNum}</span>
             </div>
           )}
 
-          {/* Bottom control bar — overlays video, always visible */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-3 z-20">
+          {/* Bottom bar — always visible, overlays video */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 20,
+            background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+            padding: '16px',
+          }}>
             {phase === 'preview' && (
-              <div className="flex items-center justify-between">
-                <p className="text-white/70 text-[10px] leading-relaxed flex-1 mr-3">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, flex: 1 }}>
                   {trackUrl ? 'Earbud in — track plays on record.' : 'Position yourself, then record.'}
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={startCountdown}
-                    className="px-4 py-2.5 bg-stc-accent text-white font-bold rounded-full text-sm whitespace-nowrap">
-                    ⏺ Record
-                  </button>
-                  <button onClick={onCancel}
-                    className="px-3 py-2.5 bg-black/50 text-white rounded-full text-sm">
-                    ✕
-                  </button>
-                </div>
+                </span>
+                <button onClick={startCountdown} style={{
+                  background: '#8B0000', color: 'white', border: 'none',
+                  borderRadius: 999, padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>
+                  Record
+                </button>
+                <button onClick={onCancel} style={{
+                  background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none',
+                  borderRadius: 999, padding: '10px 12px', fontSize: 14, cursor: 'pointer',
+                }}>
+                  X
+                </button>
               </div>
             )}
-
             {phase === 'recording' && (
-              <div className="flex justify-center">
-                <button onClick={stopRecording}
-                  className="px-8 py-3 bg-white text-stc-dark font-bold rounded-full text-sm">
-                  ■ Stop
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <button onClick={stopRecording} style={{
+                  background: 'white', color: '#1a1a2e', border: 'none',
+                  borderRadius: 999, padding: '12px 32px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}>
+                  Stop
                 </button>
               </div>
             )}
@@ -240,24 +240,20 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
         </div>
       )}
 
-      {/* ── Review (playback) ── */}
+      {/* ── Review ── */}
       {phase === 'review' && recordedUrl && (
-        <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-          <video
-            src={recordedUrl}
-            controls
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '0.5rem', overflow: 'hidden', background: 'black' }}>
+          <video src={recordedUrl} controls playsInline
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
       )}
 
-      {/* ── Review controls — below video ── */}
+      {/* ── Review controls ── */}
       {phase === 'review' && (
         <div className="mt-3 space-y-2">
           <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <p className="text-sm font-bold text-stc-success mb-1">✓ Ready for upload</p>
-            <p className="text-xs text-stc-muted">Processing takes 1–2 minutes after upload.</p>
+            <p className="text-sm font-bold text-stc-success mb-1">Ready for upload</p>
+            <p className="text-xs text-stc-muted">Processing takes 1-2 minutes after upload.</p>
           </div>
           <button onClick={handleUpload}
             className="w-full py-3 bg-stc-dark text-white font-semibold rounded-md text-sm">
