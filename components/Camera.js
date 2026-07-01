@@ -16,6 +16,7 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
   const [recordedUrl, setRecordedUrl] = useState(null);
   const [facingMode, setFacingMode] = useState('user'); // user = front, environment = rear
   const containerRef = useRef(null);
+  const timerRef = useRef(null);
 
   const toggleFullscreen = () => {
     const el = containerRef.current;
