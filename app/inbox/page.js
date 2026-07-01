@@ -10,12 +10,11 @@ export default function InboxPage() {
   const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [repRequests, setRepRequests] = useState([]);
-  const [changes, setChanges] = useState([]);
+  const [callbacks, setCallbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -25,6 +24,7 @@ export default function InboxPage() {
     setProfile(prof);
 
     if (prof.role === 'performer') {
+      // Pending representation requests
       const { data: reqs } = await supabase
         .from('agent_clients')
         .select('*, agent:agent_id(*)')
@@ -32,26 +32,13 @@ export default function InboxPage() {
         .eq('status', 'pending');
       setRepRequests(reqs || []);
 
-      const { data: subs } = await supabase
-        .from('submissions')
-        .select('id, breakdown:breakdown_id(show_name, role_name)')
-        .eq('performer_id', session.user.id);
-
-      const subIds = (subs || []).map(s => s.id);
-      if (subIds.length > 0) {
-        const { data: changeLog } = await supabase
-          .from('submission_changes')
-          .select('*, changer:changed_by(name, role)')
-          .in('submission_id', subIds)
-          .neq('changed_by', session.user.id)
-          .order('created_at', { ascending: false });
-
-        const withBreakdown = (changeLog || []).map(c => {
-          const sub = subs.find(s => s.id === c.submission_id);
-          return { ...c, breakdown: sub?.breakdown };
-        });
-        setChanges(withBreakdown);
-      }
+      // Callbacks for this performer — sorted newest first
+      const { data: cbs } = await supabase
+        .from('callbacks')
+        .select('*, breakdown:breakdown_id(show_name, role_name), casting:casting_user_id(name)')
+        .eq('performer_id', session.user.id)
+        .order('created_at', { ascending: false });
+      setCallbacks(cbs || []);
     }
 
     setLoading(false);
@@ -65,14 +52,22 @@ export default function InboxPage() {
     loadData();
   };
 
-  const markSeen = async (changeId) => {
-    await supabase.from('submission_changes').update({ seen_by_performer: true }).eq('id', changeId);
-    setChanges(prev => prev.filter(c => c.id !== changeId));
+  const confirmCallback = async (cb) => {
+    setConfirming(cb.id);
+    await supabase.from('callbacks').update({
+      performer_confirmed: true,
+      confirmed_at: new Date().toISOString(),
+      status: 'confirmed',
+    }).eq('id', cb.id);
+    setConfirming(null);
+    loadData();
   };
 
-  const isPerformer = profile?.role === 'performer';
-  const badgeCount = repRequests.length + changes.filter(c => !c.seen_by_performer).length;
+  const unconfirmedCallbacks = callbacks.filter(cb => !cb.performer_confirmed);
+  const confirmedCallbacks = callbacks.filter(cb => cb.performer_confirmed);
+  const badgeCount = repRequests.length + unconfirmedCallbacks.length;
 
+  const isPerformer = profile?.role === 'performer';
   const tabs = isPerformer
     ? [
         { id: 'portfolio', label: 'Portfolio', icon: '👤' },
@@ -86,13 +81,76 @@ export default function InboxPage() {
 
   if (loading) return <div className="min-h-screen bg-stc-bg flex items-center justify-center text-stc-muted">Loading...</div>;
 
+  const CallbackCard = ({ cb, unconfirmed }) => (
+    <div className={`rounded-lg p-3 mb-2 border ${
+      cb.type === 'final'
+        ? unconfirmed ? 'bg-amber-50 border-amber-300' : 'bg-white border-stc-border'
+        : unconfirmed ? 'bg-blue-50 border-blue-200' : 'bg-white border-stc-border'
+    }`}>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider">
+            {cb.type === 'final' ? '⭐ Final Callback' : '↩ Callback'}
+          </p>
+          <p className="text-sm font-bold mt-0.5">{cb.breakdown?.role_name} — {cb.breakdown?.show_name}</p>
+          <p className="text-[11px] text-stc-muted">from {cb.casting?.name}</p>
+        </div>
+        <p className="text-[10px] text-stc-muted flex-shrink-0 ml-2">
+          {new Date(cb.created_at).toLocaleDateString()}
+        </p>
+      </div>
+
+      {/* The note — what casting responded to */}
+      <div className="bg-white rounded-md p-2.5 mb-2 border border-gray-100">
+        <p className="text-[10px] font-bold uppercase text-stc-muted mb-1">What they responded to</p>
+        <p className="text-sm leading-relaxed italic">"{cb.note}"</p>
+      </div>
+
+      {/* Instructions if any */}
+      {cb.instructions && (
+        <div className="bg-white rounded-md p-2.5 mb-2 border border-gray-100">
+          <p className="text-[10px] font-bold uppercase text-stc-muted mb-1">What they need from you</p>
+          <p className="text-sm leading-relaxed">{cb.instructions}</p>
+        </div>
+      )}
+
+      {/* Format */}
+      <p className="text-[11px] text-stc-muted mb-2">
+        Format: <strong>
+          {cb.format === 'in_person' ? 'In person' :
+           cb.format === 'new_video' ? 'New video submission' :
+           'Your choice — in person or new video'}
+        </strong>
+      </p>
+
+      {/* Confirm button */}
+      {unconfirmed ? (
+        <button onClick={() => confirmCallback(cb)} disabled={confirming === cb.id}
+          className="w-full py-2.5 bg-stc-accent text-white font-semibold rounded-md text-sm disabled:opacity-50">
+          {confirming === cb.id ? 'Confirming...' : 'Confirm Callback'}
+        </button>
+      ) : (
+        <p className="text-[11px] text-stc-success font-bold">✓ Confirmed {cb.confirmed_at ? new Date(cb.confirmed_at).toLocaleDateString() : ''}</p>
+      )}
+
+      {/* New video link */}
+      {unconfirmed && (cb.format === 'new_video' || cb.format === 'either') && (
+        <button onClick={() => router.push('/record')}
+          className="w-full py-2.5 mt-2 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
+          Record New Footage →
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-stc-bg">
       <TopNav />
       <main className="max-w-md mx-auto px-4 py-4 pb-24">
         <h1 className="text-2xl font-bold font-serif mb-1">Inbox</h1>
-        <p className="text-xs text-stc-muted mb-6">Callbacks, notes, bookings, and representation.</p>
+        <p className="text-xs text-stc-muted mb-4">Callbacks, notes, and representation requests.</p>
 
+        {/* Representation requests */}
         {repRequests.length > 0 && (
           <>
             <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Representation requests</p>
@@ -102,64 +160,50 @@ export default function InboxPage() {
                 <p className="text-[11px] text-stc-muted mb-2">wants to represent you and submit on your behalf.</p>
                 <div className="flex gap-2">
                   <button onClick={() => respondToRequest(req.id, true)}
-                    className="flex-1 py-2 bg-stc-success text-white rounded-md text-xs font-semibold">
-                    Approve
-                  </button>
+                    className="flex-1 py-2 bg-stc-success text-white rounded-md text-xs font-semibold">Approve</button>
                   <button onClick={() => respondToRequest(req.id, false)}
-                    className="flex-1 py-2 bg-white border border-stc-border text-stc-dark rounded-md text-xs font-semibold">
-                    Decline
-                  </button>
+                    className="flex-1 py-2 bg-white border border-stc-border text-stc-dark rounded-md text-xs font-semibold">Decline</button>
                 </div>
               </div>
             ))}
           </>
         )}
 
-        {changes.length > 0 && (
+        {/* Unconfirmed callbacks — action needed */}
+        {unconfirmedCallbacks.length > 0 && (
           <>
-            <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-2">Changes by your reps</p>
-            {changes.map(c => (
-              <div key={c.id} className={`rounded-lg p-3 mb-2 border ${c.seen_by_performer ? 'bg-white border-stc-border' : 'bg-amber-50 border-amber-200'}`}>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="text-sm font-bold">{c.changer?.name}</p>
-                    <p className="text-[11px] text-stc-muted">
-                      {c.change_summary || c.change_type} — {c.breakdown?.show_name} ({c.breakdown?.role_name})
-                    </p>
-                    <p className="text-[10px] text-stc-muted mt-1">{new Date(c.created_at).toLocaleString()}</p>
-                  </div>
-                  {!c.seen_by_performer && (
-                    <button onClick={() => markSeen(c.id)} className="text-[10px] text-stc-link underline ml-2 flex-shrink-0">
-                      Mark seen
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+            <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-2">
+              Action needed — {unconfirmedCallbacks.length} callback{unconfirmedCallbacks.length !== 1 ? 's' : ''}
+            </p>
+            {unconfirmedCallbacks.map(cb => <CallbackCard key={cb.id} cb={cb} unconfirmed={true} />)}
           </>
         )}
 
-        {repRequests.length === 0 && changes.length === 0 && (
+        {/* Confirmed callbacks — history */}
+        {confirmedCallbacks.length > 0 && (
+          <>
+            <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-3">Previous callbacks</p>
+            {confirmedCallbacks.map(cb => <CallbackCard key={cb.id} cb={cb} unconfirmed={false} />)}
+          </>
+        )}
+
+        {repRequests.length === 0 && callbacks.length === 0 && (
           <div className="bg-white border border-stc-border rounded-lg p-8 text-center">
             <div className="text-3xl mb-3">✉</div>
             <p className="text-sm font-bold mb-2">No notifications yet</p>
             <p className="text-xs text-stc-muted leading-relaxed">
-              When casting directors review your tapes and send callbacks, or when a rep wants to represent you, you'll see it here.
+              When casting sends you a callback or a rep requests to represent you, it appears here.
             </p>
           </div>
         )}
       </main>
 
-      <BottomNav
-        tabs={tabs}
-        active="inbox"
-        onSelect={(id) => {
-          if (id === 'portfolio') router.push('/portfolio');
-          if (id === 'record') router.push('/record');
-          if (id === 'browse') router.push('/browse');
-          if (id === 'help') router.push('/help');
-        }}
-      />
+      <BottomNav tabs={tabs} active="inbox" onSelect={(id) => {
+        if (id === 'portfolio') router.push('/portfolio');
+        if (id === 'record') router.push('/record');
+        if (id === 'browse') router.push('/browse');
+        if (id === 'help') router.push('/help');
+      }} />
     </div>
   );
 }
