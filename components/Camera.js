@@ -15,7 +15,17 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordedUrl, setRecordedUrl] = useState(null);
   const [facingMode, setFacingMode] = useState('user'); // user = front, environment = rear
-  const timerRef = useRef(null);
+  const containerRef = useRef(null);
+
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
+    } else {
+      document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+    }
+  };
 
   // Start camera stream
   const startCamera = useCallback(async (facing) => {
@@ -156,7 +166,7 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       {/* ── Camera Preview / Recording ── */}
       {(phase === 'preview' || phase === 'countdown' || phase === 'recording') && (
         <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
@@ -178,6 +188,12 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
               </span>
             </div>
           </div>
+
+          {/* Fullscreen button */}
+          <button onClick={toggleFullscreen}
+            className="absolute top-3 left-3 bg-black/50 text-white rounded-md px-2.5 py-1.5 text-xs font-semibold z-10">
+            ⛶ Full Screen
+          </button>
 
           {/* Countdown overlay */}
           {phase === 'countdown' && (
