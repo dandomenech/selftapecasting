@@ -48,12 +48,31 @@ export default function RecordRolePage() {
     setTapeCount(count || 0);
   };
 
-  // Guard used before entering the recording flow — blocks early if at the cap
-  const guardedGoTo = (nextStep) => {
-    if (!isPro && tapeCount !== null && tapeCount >= FREE_TAPE_LIMIT) {
-      setStep('capReached');
-      return;
+  // Guard used before entering the recording flow.
+  // Fetches fresh from the database every time rather than trusting
+  // possibly-stale component state — closes a race condition where
+  // tapping quickly before the initial count loaded let the cap through.
+  const guardedGoTo = async (nextStep) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push('/login'); return; }
+
+    const { data: prof } = await supabase.from('profiles').select('pro_tier').eq('id', session.user.id).single();
+    const pro = !!prof?.pro_tier;
+
+    if (!pro) {
+      const { count } = await supabase
+        .from('videos')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('status', 'live');
+
+      if ((count || 0) >= FREE_TAPE_LIMIT) {
+        setTapeCount(count);
+        setStep('capReached');
+        return;
+      }
     }
+
     setStep(nextStep);
   };
 
@@ -61,8 +80,11 @@ export default function RecordRolePage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/login'); return; }
 
-    // Safety-net cap check right before upload
-    if (!isPro) {
+    // Safety-net cap check right before upload — fetches fresh, not from state
+    const { data: prof } = await supabase.from('profiles').select('pro_tier').eq('id', session.user.id).single();
+    const pro = !!prof?.pro_tier;
+
+    if (!pro) {
       const { count } = await supabase
         .from('videos')
         .select('*', { count: 'exact', head: true })
@@ -111,6 +133,13 @@ export default function RecordRolePage() {
 
     if (dbError) {
       console.error('DB error:', dbError);
+      // The database trigger rejects inserts at the tape cap — catch that
+      // specific case and show the proper cap screen instead of a generic error.
+      if (dbError.message?.includes('FREE_TAPE_LIMIT_REACHED')) {
+        setUploading(false);
+        setStep('capReached');
+        return;
+      }
       alert('Error saving video record.');
       setUploading(false);
       return;
