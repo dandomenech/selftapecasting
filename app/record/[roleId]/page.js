@@ -187,7 +187,7 @@ export default function RecordRolePage() {
             </p>
             <div className="bg-stc-bg border border-stc-border rounded-lg p-3 mb-4 text-left">
               <p className="text-xs font-bold mb-1">Pro (coming soon)</p>
-              <p className="text-[11px] text-stc-muted">More storage, priority placement in casting search, full watcher analytics.</p>
+              <p className="text-[11px] text-stc-muted">More storage and full watcher analytics.</p>
             </div>
             <button onClick={() => router.push('/portfolio')}
               className="w-full py-3 bg-stc-dark text-white font-semibold rounded-md text-sm mb-2">
