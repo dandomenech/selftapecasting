@@ -15,6 +15,7 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [inboxCount, setInboxCount] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -79,6 +80,19 @@ export default function PortfolioPage() {
     (allRoles || []).forEach(r => { rolesMap[r.id] = r; });
     setRoles(rolesMap);
 
+    // Inbox badge count — unconfirmed callbacks + pending rep requests
+    const { count: callbackCount } = await supabase
+      .from('callbacks')
+      .select('*', { count: 'exact', head: true })
+      .eq('performer_id', session.user.id)
+      .eq('performer_confirmed', false);
+    const { count: repCount } = await supabase
+      .from('agent_clients')
+      .select('*', { count: 'exact', head: true })
+      .eq('performer_id', session.user.id)
+      .eq('status', 'pending');
+    setInboxCount((callbackCount || 0) + (repCount || 0));
+
     setLoading(false);
   };
 
@@ -97,7 +111,7 @@ export default function PortfolioPage() {
   const tabs = [
     { id: 'portfolio', label: 'Portfolio', icon: '👤' },
     { id: 'record', label: 'Record', icon: '⏺' },
-    { id: 'inbox', label: 'Inbox', icon: '✉', badge: 0 },
+    { id: 'inbox', label: 'Inbox', icon: '✉', badge: inboxCount },
   ];
 
   if (loading) return <div className="min-h-screen bg-stc-bg flex items-center justify-center text-stc-muted">Loading...</div>;

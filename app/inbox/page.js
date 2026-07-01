@@ -12,7 +12,6 @@ export default function InboxPage() {
   const [repRequests, setRepRequests] = useState([]);
   const [callbacks, setCallbacks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [confirming, setConfirming] = useState(null);
 
   useEffect(() => { loadData(); }, []);
 
@@ -20,7 +19,8 @@ export default function InboxPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.push('/login'); return; }
 
-    const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    const { data: prof } = await supabase
+      .from('profiles').select('*').eq('id', session.user.id).single();
     setProfile(prof);
 
     if (prof.role === 'performer') {
@@ -32,7 +32,7 @@ export default function InboxPage() {
         .eq('status', 'pending');
       setRepRequests(reqs || []);
 
-      // Callbacks for this performer — sorted newest first
+      // All callbacks, newest first
       const { data: cbs } = await supabase
         .from('callbacks')
         .select('*, breakdown:breakdown_id(show_name, role_name), casting:casting_user_id(name)')
@@ -52,20 +52,9 @@ export default function InboxPage() {
     loadData();
   };
 
-  const confirmCallback = async (cb) => {
-    setConfirming(cb.id);
-    await supabase.from('callbacks').update({
-      performer_confirmed: true,
-      confirmed_at: new Date().toISOString(),
-      status: 'confirmed',
-    }).eq('id', cb.id);
-    setConfirming(null);
-    loadData();
-  };
-
-  const unconfirmedCallbacks = callbacks.filter(cb => !cb.performer_confirmed);
-  const confirmedCallbacks = callbacks.filter(cb => cb.performer_confirmed);
-  const badgeCount = repRequests.length + unconfirmedCallbacks.length;
+  const unconfirmed = callbacks.filter(cb => !cb.performer_confirmed);
+  const confirmed = callbacks.filter(cb => cb.performer_confirmed);
+  const badgeCount = repRequests.length + unconfirmed.length;
 
   const isPerformer = profile?.role === 'performer';
   const tabs = isPerformer
@@ -81,65 +70,35 @@ export default function InboxPage() {
 
   if (loading) return <div className="min-h-screen bg-stc-bg flex items-center justify-center text-stc-muted">Loading...</div>;
 
-  const CallbackCard = ({ cb, unconfirmed }) => (
-    <div className={`rounded-lg p-3 mb-2 border ${
-      cb.type === 'final'
-        ? unconfirmed ? 'bg-amber-50 border-amber-300' : 'bg-white border-stc-border'
-        : unconfirmed ? 'bg-blue-50 border-blue-200' : 'bg-white border-stc-border'
-    }`}>
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider">
-            {cb.type === 'final' ? '⭐ Final Callback' : '↩ Callback'}
-          </p>
-          <p className="text-sm font-bold mt-0.5">{cb.breakdown?.role_name} — {cb.breakdown?.show_name}</p>
+  const CallbackRow = ({ cb, needsAction }) => (
+    <div onClick={() => router.push(`/callbacks/${cb.id}`)}
+      className={`rounded-lg p-3 mb-2 border cursor-pointer active:opacity-80
+        ${needsAction
+          ? cb.type === 'final'
+            ? 'bg-amber-50 border-amber-300'
+            : 'bg-blue-50 border-blue-200'
+          : 'bg-white border-stc-border'}`}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider">
+              {cb.type === 'final' ? '⭐ Final Callback' : '↩ Callback'}
+            </p>
+            {needsAction && (
+              <span className="text-[9px] bg-stc-accent text-white font-bold px-1.5 py-0.5 rounded-full">
+                Action needed
+              </span>
+            )}
+          </div>
+          <p className="text-sm font-bold">{cb.breakdown?.role_name} — {cb.breakdown?.show_name}</p>
           <p className="text-[11px] text-stc-muted">from {cb.casting?.name}</p>
+          <p className="text-[11px] text-stc-muted mt-1 truncate">"{cb.note}"</p>
         </div>
-        <p className="text-[10px] text-stc-muted flex-shrink-0 ml-2">
-          {new Date(cb.created_at).toLocaleDateString()}
-        </p>
-      </div>
-
-      {/* The note — what casting responded to */}
-      <div className="bg-white rounded-md p-2.5 mb-2 border border-gray-100">
-        <p className="text-[10px] font-bold uppercase text-stc-muted mb-1">What they responded to</p>
-        <p className="text-sm leading-relaxed italic">"{cb.note}"</p>
-      </div>
-
-      {/* Instructions if any */}
-      {cb.instructions && (
-        <div className="bg-white rounded-md p-2.5 mb-2 border border-gray-100">
-          <p className="text-[10px] font-bold uppercase text-stc-muted mb-1">What they need from you</p>
-          <p className="text-sm leading-relaxed">{cb.instructions}</p>
+        <div className="flex-shrink-0 ml-3 text-right">
+          <p className="text-[10px] text-stc-muted">{new Date(cb.created_at).toLocaleDateString()}</p>
+          <p className="text-stc-muted text-lg mt-1">›</p>
         </div>
-      )}
-
-      {/* Format */}
-      <p className="text-[11px] text-stc-muted mb-2">
-        Format: <strong>
-          {cb.format === 'in_person' ? 'In person' :
-           cb.format === 'new_video' ? 'New video submission' :
-           'Your choice — in person or new video'}
-        </strong>
-      </p>
-
-      {/* Confirm button */}
-      {unconfirmed ? (
-        <button onClick={() => confirmCallback(cb)} disabled={confirming === cb.id}
-          className="w-full py-2.5 bg-stc-accent text-white font-semibold rounded-md text-sm disabled:opacity-50">
-          {confirming === cb.id ? 'Confirming...' : 'Confirm Callback'}
-        </button>
-      ) : (
-        <p className="text-[11px] text-stc-success font-bold">✓ Confirmed {cb.confirmed_at ? new Date(cb.confirmed_at).toLocaleDateString() : ''}</p>
-      )}
-
-      {/* New video link */}
-      {unconfirmed && (cb.format === 'new_video' || cb.format === 'either') && (
-        <button onClick={() => router.push('/record')}
-          className="w-full py-2.5 mt-2 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
-          Record New Footage →
-        </button>
-      )}
+      </div>
     </div>
   );
 
@@ -148,9 +107,9 @@ export default function InboxPage() {
       <TopNav />
       <main className="max-w-md mx-auto px-4 py-4 pb-24">
         <h1 className="text-2xl font-bold font-serif mb-1">Inbox</h1>
-        <p className="text-xs text-stc-muted mb-4">Callbacks, notes, and representation requests.</p>
+        <p className="text-xs text-stc-muted mb-4">Tap any callback to see the full details and respond.</p>
 
-        {/* Representation requests */}
+        {/* Rep requests */}
         {repRequests.length > 0 && (
           <>
             <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">Representation requests</p>
@@ -169,28 +128,28 @@ export default function InboxPage() {
           </>
         )}
 
-        {/* Unconfirmed callbacks — action needed */}
-        {unconfirmedCallbacks.length > 0 && (
+        {/* Unconfirmed callbacks */}
+        {unconfirmed.length > 0 && (
           <>
             <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-2">
-              Action needed — {unconfirmedCallbacks.length} callback{unconfirmedCallbacks.length !== 1 ? 's' : ''}
+              Needs your response — {unconfirmed.length}
             </p>
-            {unconfirmedCallbacks.map(cb => <CallbackCard key={cb.id} cb={cb} unconfirmed={true} />)}
+            {unconfirmed.map(cb => <CallbackRow key={cb.id} cb={cb} needsAction={true} />)}
           </>
         )}
 
-        {/* Confirmed callbacks — history */}
-        {confirmedCallbacks.length > 0 && (
+        {/* Confirmed callbacks */}
+        {confirmed.length > 0 && (
           <>
-            <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-3">Previous callbacks</p>
-            {confirmedCallbacks.map(cb => <CallbackCard key={cb.id} cb={cb} unconfirmed={false} />)}
+            <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-3">Confirmed</p>
+            {confirmed.map(cb => <CallbackRow key={cb.id} cb={cb} needsAction={false} />)}
           </>
         )}
 
         {repRequests.length === 0 && callbacks.length === 0 && (
           <div className="bg-white border border-stc-border rounded-lg p-8 text-center">
             <div className="text-3xl mb-3">✉</div>
-            <p className="text-sm font-bold mb-2">No notifications yet</p>
+            <p className="text-sm font-bold mb-2">Nothing here yet</p>
             <p className="text-xs text-stc-muted leading-relaxed">
               When casting sends you a callback or a rep requests to represent you, it appears here.
             </p>
