@@ -179,36 +179,63 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
           />
 
-          {/* Framing guide — 3/4 body, not close-up */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="border-2 border-dashed border-white/40 rounded-md w-[35%] h-[85%]
-                          flex items-end justify-center pb-3">
-              <span className="text-white/50 text-[9px] uppercase tracking-widest text-center leading-relaxed px-1">
-                3/4 body{'\n'}adjust tripod
-              </span>
-            </div>
-          </div>
-
-          {/* Fullscreen button */}
+          {/* Fullscreen toggle — top left */}
           <button onClick={toggleFullscreen}
-            className="absolute top-3 left-3 bg-black/50 text-white rounded-md px-2.5 py-1.5 text-xs font-semibold z-10">
+            className="absolute top-3 left-3 bg-black/50 text-white rounded-md px-2.5 py-1.5 text-xs font-semibold z-20">
             ⛶ Full Screen
           </button>
 
+          {/* Switch camera — top right */}
+          {phase === 'preview' && (
+            <button onClick={switchCamera}
+              className="absolute top-3 right-3 bg-black/50 text-white rounded-md px-2.5 py-1.5 text-xs font-semibold z-20">
+              ↺ Flip
+            </button>
+          )}
+
+          {/* Recording indicator — top right during recording */}
+          {phase === 'recording' && (
+            <div className="absolute top-3 right-3 bg-black/60 px-2.5 py-1 rounded text-red-500 text-sm font-bold z-20">
+              ● REC {formatTime(recordingTime)}
+            </div>
+          )}
+
           {/* Countdown overlay */}
           {phase === 'countdown' && (
-            <div className="absolute inset-0 bg-black/85 flex items-center justify-center z-10">
+            <div className="absolute inset-0 bg-black/85 flex items-center justify-center z-20">
               <span className="text-white text-8xl font-bold font-serif">{countdownNum}</span>
             </div>
           )}
 
-          {/* Recording indicator */}
-          {phase === 'recording' && (
-            <div className="absolute top-3 right-3 bg-black/60 px-2.5 py-1 rounded text-red-500
-                          text-sm font-bold z-10">
-              ● REC {formatTime(recordingTime)}
-            </div>
-          )}
+          {/* Bottom control bar — overlays video, always visible */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-3 z-20">
+            {phase === 'preview' && (
+              <div className="flex items-center justify-between">
+                <p className="text-white/70 text-[10px] leading-relaxed flex-1 mr-3">
+                  {trackUrl ? 'Earbud in — track plays on record.' : 'Position yourself, then record.'}
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={startCountdown}
+                    className="px-4 py-2.5 bg-stc-accent text-white font-bold rounded-full text-sm whitespace-nowrap">
+                    ⏺ Record
+                  </button>
+                  <button onClick={onCancel}
+                    className="px-3 py-2.5 bg-black/50 text-white rounded-full text-sm">
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {phase === 'recording' && (
+              <div className="flex justify-center">
+                <button onClick={stopRecording}
+                  className="px-8 py-3 bg-white text-stc-dark font-bold rounded-full text-sm">
+                  ■ Stop
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -224,61 +251,27 @@ export default function Camera({ trackUrl, onRecordingComplete, onCancel }) {
         </div>
       )}
 
-      {/* ── Controls ── */}
-      <div className="mt-3 space-y-2">
-        {phase === 'preview' && (
-          <>
-            <p className="text-xs text-stc-muted mb-2">
-              {trackUrl
-                ? 'Put one earbud in. Backing track will play when recording starts.'
-                : 'Position yourself within the frame, then tap record.'}
-            </p>
-            <button onClick={startCountdown}
-              className="w-full py-3 bg-stc-accent text-white font-semibold rounded-md text-sm">
-              ⏺ &nbsp;Play Track & Record
-            </button>
-            <button onClick={switchCamera}
-              className="w-full py-3 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
-              Switch Camera
-            </button>
-            <button onClick={onCancel}
-              className="w-full py-3 text-stc-muted text-sm">
-              Cancel
-            </button>
-          </>
-        )}
-
-        {phase === 'recording' && (
-          <button onClick={stopRecording}
-            className="w-full py-3 bg-stc-accent text-white font-semibold rounded-md text-sm">
-            ■ &nbsp;Stop Recording ({formatTime(recordingTime)})
+      {/* ── Review controls — below video ── */}
+      {phase === 'review' && (
+        <div className="mt-3 space-y-2">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-sm font-bold text-stc-success mb-1">✓ Ready for upload</p>
+            <p className="text-xs text-stc-muted">Processing takes 1–2 minutes after upload.</p>
+          </div>
+          <button onClick={handleUpload}
+            className="w-full py-3 bg-stc-dark text-white font-semibold rounded-md text-sm">
+            Upload to Portfolio
           </button>
-        )}
-
-        {phase === 'review' && (
-          <>
-            {/* Quality check placeholder */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2">
-              <p className="text-sm font-bold text-stc-success mb-1">✓ Ready for upload</p>
-              <p className="text-xs text-stc-muted">
-                Audio will be mixed and lighting corrected after upload. Processing takes 1–2 minutes.
-              </p>
-            </div>
-            <button onClick={handleUpload}
-              className="w-full py-3 bg-stc-dark text-white font-semibold rounded-md text-sm">
-              Upload to Portfolio
-            </button>
-            <button onClick={handleReRecord}
-              className="w-full py-3 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
-              Re-record
-            </button>
-            <button onClick={onCancel}
-              className="w-full py-3 text-stc-accent text-sm">
-              Discard
-            </button>
-          </>
-        )}
-      </div>
+          <button onClick={handleReRecord}
+            className="w-full py-3 bg-white border border-stc-border text-stc-dark font-semibold rounded-md text-sm">
+            Re-record
+          </button>
+          <button onClick={onCancel}
+            className="w-full py-3 text-stc-accent text-sm">
+            Discard
+          </button>
+        </div>
+      )}
     </div>
   );
 }
