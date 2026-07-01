@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import TopNav from '@/components/TopNav';
+import VerificationGate from '@/components/VerificationGate';
 
-export default function SubmissionViewerPage() {
+function SubmissionViewerInner() {
   const router = useRouter();
   const params = useParams();
   const submissionId = params.submissionId;
@@ -444,5 +445,13 @@ export default function SubmissionViewerPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SubmissionViewerPage() {
+  return (
+    <VerificationGate>
+      <SubmissionViewerInner />
+    </VerificationGate>
   );
 }

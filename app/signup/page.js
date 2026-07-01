@@ -13,14 +13,24 @@ function SignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [company, setCompany] = useState('');
+  const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const isProfessional = defaultRole === 'casting' || defaultRole === 'agent';
+
   const handleSignup = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (isProfessional && (!company.trim() || !title.trim())) {
+      setError('Company/organization and your title are required for casting and agent accounts.');
+      return;
+    }
+
     setLoading(true);
 
     const { data, error: authError } = await supabase.auth.signUp({
@@ -36,6 +46,16 @@ function SignupForm() {
       setError(authError.message);
       setLoading(false);
       return;
+    }
+
+    // Save professional details for verification review
+    if (isProfessional && data.user) {
+      await supabase.from('profiles').update({
+        company: company.trim(),
+        title: title.trim(),
+        professional_email: email.trim(),
+        verification_requested_at: new Date().toISOString(),
+      }).eq('id', data.user.id);
     }
 
     setSuccess(true);
@@ -77,11 +97,36 @@ function SignupForm() {
               className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
               placeholder="Your full name" />
           </div>
+
+          {isProfessional && (
+            <>
+              <div>
+                <label className="block text-xs font-bold uppercase text-stc-muted mb-1">
+                  {defaultRole === 'agent' ? 'Agency / Management Company' : 'Company / Organization'} <span className="text-stc-accent">*</span>
+                </label>
+                <input type="text" value={company} onChange={e => setCompany(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
+                  placeholder={defaultRole === 'agent' ? 'e.g. Buchwald' : 'e.g. Telsey + Company'} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Your Title <span className="text-stc-accent">*</span></label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
+                  placeholder={defaultRole === 'agent' ? 'e.g. Talent Agent' : 'e.g. Casting Director'} />
+              </div>
+            </>
+          )}
+
           <div>
-            <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Email</label>
+            <label className="block text-xs font-bold uppercase text-stc-muted mb-1">
+              {isProfessional ? 'Professional Email' : 'Email'}
+            </label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
               className="w-full px-3 py-2.5 border border-stc-border rounded-md text-base bg-white"
-              placeholder="email@example.com" />
+              placeholder={isProfessional ? 'you@yourcompany.com' : 'email@example.com'} />
+            {isProfessional && (
+              <p className="text-[10px] text-stc-muted mt-1">Use your work email — it helps us verify you faster.</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-bold uppercase text-stc-muted mb-1">Password</label>
@@ -99,6 +144,14 @@ function SignupForm() {
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3">
               <p className="text-sm text-stc-accent">{error}</p>
+            </div>
+          )}
+
+          {isProfessional && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-[11px] leading-relaxed text-stc-dark">
+                Casting and agent accounts are manually verified before you can view performer submissions or post roles. This protects performers' privacy. We'll review your details shortly after signup.
+              </p>
             </div>
           )}
 

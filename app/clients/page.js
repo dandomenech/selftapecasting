@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import TopNav from '@/components/TopNav';
 import BottomNav from '@/components/BottomNav';
+import VerificationGate from '@/components/VerificationGate';
 
 const TABS = [
   { id: 'browse', label: 'Browse', icon: '🔍' },
@@ -12,7 +13,7 @@ const TABS = [
   { id: 'help', label: 'Help', icon: '✉' },
 ];
 
-export default function ClientsPage() {
+function ClientsInner() {
   const router = useRouter();
   const [clients, setClients] = useState([]); // active
   const [pending, setPending] = useState([]); // pending requests sent
@@ -161,5 +162,13 @@ export default function ClientsPage() {
         if (id === 'help') router.push('/help');
       }} />
     </div>
+  );
+}
+
+export default function ClientsPage() {
+  return (
+    <VerificationGate>
+      <ClientsInner />
+    </VerificationGate>
   );
 }

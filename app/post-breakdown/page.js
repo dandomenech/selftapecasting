@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import TopNav from '@/components/TopNav';
 import BottomNav from '@/components/BottomNav';
+import VerificationGate from '@/components/VerificationGate';
 
 const TABS = [
   { id: 'browse', label: 'Browse', icon: '🔍' },
@@ -19,7 +20,7 @@ const PAY_UNIT_LABELS = {
   flat: 'flat / total run',
 };
 
-export default function PostBreakdownPage() {
+function PostBreakdownInner() {
   const router = useRouter();
   const [step, setStep] = useState('form'); // form | preview
   const [showName, setShowName] = useState('');
@@ -390,5 +391,13 @@ export default function PostBreakdownPage() {
         if (id === 'breakdowns') router.push('/breakdowns');
       }} />
     </div>
+  );
+}
+
+export default function PostBreakdownPage() {
+  return (
+    <VerificationGate>
+      <PostBreakdownInner />
+    </VerificationGate>
   );
 }

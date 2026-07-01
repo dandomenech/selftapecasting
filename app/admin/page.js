@@ -36,6 +36,33 @@ export default function AdminPage() {
     setLoading(false);
   };
 
+  const handleVerify = async (userId, decision) => {
+    // Get the current admin's email to authorize the RPC
+    const { data: { session } } = await supabase.auth.getSession();
+    const adminEmail = session?.user?.email;
+
+    if (!adminEmail) {
+      alert('You must be logged in as the admin account to approve verifications.');
+      return;
+    }
+
+    const { data, error } = await supabase.rpc('approve_verification', {
+      target_user_id: userId,
+      decision: decision,
+      admin_email: adminEmail,
+    });
+
+    if (error) {
+      alert('Error: ' + error.message);
+      return;
+    }
+    if (data === 'unauthorized') {
+      alert('This account is not authorized to approve verifications. You must be logged in as the platform admin.');
+      return;
+    }
+    loadData();
+  };
+
   useEffect(() => {
     if (authed) loadData();
   }, [authed]);
@@ -121,6 +148,7 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex bg-[#eee5db] rounded-lg p-0.5 mb-4">
           {[
+            { id: 'verify', label: 'Verify' },
             { id: 'signups', label: 'Signups' },
             { id: 'emails', label: 'Email List' },
             { id: 'rankings', label: 'Rankings' },
@@ -134,6 +162,90 @@ export default function AdminPage() {
         </div>
 
         {loading && <p className="text-sm text-stc-muted text-center py-8">Loading...</p>}
+
+        {/* ── VERIFY TAB ── */}
+        {!loading && tab === 'verify' && (
+          <>
+            {(() => {
+              const pending = profiles.filter(p =>
+                (p.role === 'casting' || p.role === 'agent') &&
+                !p.verified &&
+                p.verification_status !== 'rejected'
+              );
+              const decided = profiles.filter(p =>
+                (p.role === 'casting' || p.role === 'agent') &&
+                (p.verified || p.verification_status === 'rejected')
+              );
+
+              return (
+                <>
+                  <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2">
+                    Pending review ({pending.length})
+                  </p>
+                  {pending.length === 0 ? (
+                    <div className="bg-white border border-stc-border rounded-lg p-4 text-center mb-4">
+                      <p className="text-sm text-stc-muted">No accounts awaiting verification.</p>
+                    </div>
+                  ) : (
+                    pending.map(p => {
+                      const email = p.professional_email || p.email || '';
+                      const domain = email.split('@')[1] || '';
+                      const isFreeEmail = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com'].includes(domain.toLowerCase());
+                      return (
+                        <div key={p.id} className="bg-white border border-stc-border rounded-lg p-4 mb-2">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="text-sm font-bold">{p.name || '(no name)'}</p>
+                              <p className="text-[11px] text-stc-muted">{p.title} · {p.company}</p>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 uppercase">
+                              {p.role}
+                            </span>
+                          </div>
+                          <p className="text-xs text-stc-muted mb-1">{email}</p>
+                          <p className={`text-[10px] mb-3 ${isFreeEmail ? 'text-stc-warning' : 'text-stc-success'}`}>
+                            {isFreeEmail ? '⚠ Free email domain — verify carefully' : '✓ Professional domain'}
+                          </p>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleVerify(p.id, 'approve')}
+                              className="flex-1 py-2 bg-stc-success text-white rounded-md text-xs font-semibold">
+                              Approve
+                            </button>
+                            <button onClick={() => handleVerify(p.id, 'reject')}
+                              className="flex-1 py-2 bg-white border border-stc-border text-stc-accent rounded-md text-xs font-semibold">
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {decided.length > 0 && (
+                    <>
+                      <p className="text-xs font-bold uppercase tracking-wider text-stc-muted mb-2 mt-4">
+                        Reviewed ({decided.length})
+                      </p>
+                      {decided.map(p => (
+                        <div key={p.id} className="bg-white border border-stc-border rounded-lg p-3 mb-2 flex justify-between items-center">
+                          <div>
+                            <p className="text-sm font-bold">{p.name}</p>
+                            <p className="text-[10px] text-stc-muted">{p.title} · {p.company}</p>
+                          </div>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                            p.verified ? 'bg-green-100 text-stc-success' : 'bg-gray-100 text-stc-muted'
+                          }`}>
+                            {p.verified ? 'Approved' : 'Rejected'}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </>
+        )}
 
         {/* ── SIGNUPS TAB ── */}
         {!loading && tab === 'signups' && (
